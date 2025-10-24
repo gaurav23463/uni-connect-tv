@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LPU Connect TV - Meet. Talk. Connect. Instantly.</title>
+    <style>
+        body {
+            box-sizing: border-box;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-bg: #1a1a2e;
+            --card-bg: #16213e;
+            --text-primary: #ffffff;
+            --text-secondary: #b8c5d6;
+            --accent-blue: #5865f2;
+            --accent-violet: #7c3aed;
+            --success: #00d4aa;
+            --danger: #ed4245;
+            --warning: #faa61a;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --border-radius: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="light"] {
+            --primary-bg: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            --secondary-bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--primary-bg);
+            color: var(--text-primary);
+            min-height: 100%;
+            transition: var(--transition);
+        }
+
+        html {
+            height: 100%;
+        }
+
+        .container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            position: relative;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(45deg, var(--accent-blue), var(--accent-violet));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .theme-toggle {
+            background: var(--card-bg);
+            border: 2px solid var(--accent-blue);
+            border-radius: 50px;
+            padding: 0.5rem 1rem;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition);
+            font-weight: 500;
+        }
+
+        .theme-toggle:hover {
+            background: var(--accent-blue);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--accent-blue), var(--accent-violet));
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--card-bg);
+            color: var(--text-primary);
+            border: 2px solid var(--accent-blue);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        /* Landing Page */
+        .landing {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            background: var(--primary-bg);
+        }
+
+        .hero {
+            max-width: 600px;
+            margin-bottom: 3rem;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, var(--accent-blue), var(--accent-violet));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tagline {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Chat Interface */
+        .chat-interface {
+            display: none;
+            flex: 1;
+            padding: 2rem;
+            gap: 2rem;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .video-area {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            min-height: 400px;
+        }
+
+        .video-box {
+            background: var(--secondary-bg);
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+        }
+
+        .video-placeholder {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        .video-label {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .chat-controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            height: fit-content;
+            max-height: 600px;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--text-secondary);
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            min-height: 300px;
+            max-height: 400px;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 12px;
+            max-width: 80%;
+        }
+
+        .message.own {
+            background: var(--accent-blue);
+            color: white;
+            margin-left: auto;
+        }
+
+        .message.other {
+            background: var(--secondary-bg);
+            color: var(--text-primary);
+        }
+
+        .chat-input-area {
+            padding: 1rem;
+            border-top: 1px solid var(--text-secondary);
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--accent-blue);
+            border-radius: 12px;
+            background: var(--secondary-bg);
+            color: var(--text-primary);
+            font-size: 1rem;
+            resize: none;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent-violet);
+            box-shadow: 0 0 0 3px rgba(120, 58, 237, 0.1);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: var(--shadow);
+            transform: scale(0.9);
+            transition: var(--transition);
+        }
+
+        .modal.active .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-header h2 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent-blue);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--accent-blue);
+            border-radius: 12px;
+            background: var(--secondary-bg);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-violet);
+            box-shadow: 0 0 0 3px rgba(120, 58, 237, 0.1);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .close-modal:hover {
+            color: var(--text-primary);
+            transform: scale(1.1);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .tagline {
+                font-size: 1.2rem;
+            }
+
+            .chat-interface {
+                flex-direction: column;
+                padding: 1rem;
+            }
+
+            .sidebar {
+                width: 100%;
+                order: -1;
+                max-height: 300px;
+            }
+
+            .video-area {
+                grid-template-columns: 1fr;
+                min-height: 300px;
+            }
+
+            .chat-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 200px;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        /* Status Indicator */
+        .status-indicator {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--success);
+            border: 2px solid white;
+        }
+
+        .status-indicator.offline {
+            background: var(--text-secondary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">Uni</div>
+                <span>Connect TV</span>
+            </div>
+            <div class="header-controls">
+                <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark</button>
+                <button class="btn btn-secondary" onclick="showModal('auth')">Login</button>
+            </div>
+        </header>
+
+        <!-- Landing Page -->
+        <main class="landing" id="landing">
+            <div class="hero fade-in">
+                <h1>Uni Connect TV</h1>
+                <p class="tagline">Meet. Talk. Connect. Instantly.</p>
+                <div class="cta-buttons">
+                    <button class="btn btn-primary" onclick="showModal('auth')">Get Started</button>
+                    <button class="btn btn-secondary" onclick="startDemo()">Try Demo</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Chat Interface -->
+        <main class="chat-interface" id="chatInterface">
+            <div class="main-content">
+                <div class="video-area">
+                    <div class="video-box">
+                        <div class="video-label">You</div>
+                        <div class="video-placeholder">📹 Camera Loading...</div>
+                        <div class="status-indicator"></div>
+                    </div>
+                    <div class="video-box">
+                        <div class="video-label">Partner</div>
+                        <div class="video-placeholder">⏳ Finding Partner...</div>
+                        <div class="status-indicator offline"></div>
+                    </div>
+                </div>
+                <div class="chat-controls">
+                    <button class="btn btn-primary" onclick="nextPartner()">🔄 Next</button>
+                    <button class="btn btn-warning" onclick="reportUser()">⚠️ Report</button>
+                    <button class="btn btn-danger" onclick="endChat()">❌ End Chat</button>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="sidebar-header">💬 Chat Messages</div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message other">
+                        <strong>Partner:</strong> Hello! How are you?
+                    </div>
+                    <div class="message own">
+                        <strong>You:</strong> Hi there! I'm doing great, thanks!
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <textarea class="chat-input" placeholder="Type your message..." rows="2"
+                        onkeypress="handleChatInput(event)"></textarea>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="modal" id="authModal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="hideModal('auth')">&times;</button>
+            <div class="modal-header">
+                <h2>Welcome to Uni Connect TV</h2>
+                <p>Join the conversation</p>
+            </div>
+            <form onsubmit="handleAuth(event)">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" class="form-control" placeholder="your.email@.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="form-control" placeholder="Enter your password"
+                        required>
+                </div>
+                <div class="form-group">
+                    <label for="department">Department</label>
+                    <select id="department" class="form-control" required>
+                        <option value="">Select Department</option>
+                        <option value="cse">Computer Science & Engineering</option>
+                        <option value="ece">Electronics & Communication</option>
+                        <option value="me">Mechanical Engineering</option>
+                        <option value="ce">Civil Engineering</option>
+                        <option value="mba">MBA</option>
+                        <option value="bba">BBA</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Login / Sign Up</button>
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('auth')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Theme Toggle
+        function toggleTheme() {
+            const body = document.body;
+            const themeToggle = document.querySelector('.theme-toggle');
+
+            if (body.getAttribute('data-theme') === 'light') {
+                body.removeAttribute('data-theme');
+                themeToggle.innerHTML = '🌙 Dark';
+            } else {
+                body.setAttribute('data-theme', 'light');
+                themeToggle.innerHTML = '☀️ Light';
+            }
+        }
+
+        // Modal Functions
+        function showModal(type) {
+            const modal = document.getElementById(type + 'Modal');
+            modal.classList.add('active');
+        }
+
+        function hideModal(type) {
+            const modal = document.getElementById(type + 'Modal');
+            modal.classList.remove('active');
+        }
+
+        // Auth Handler
+        function handleAuth(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const department = document.getElementById('department').value;
+
+            // Simulate authentication
+            // Replace simulated authentication in handleAuth()
+            // Determine correct API base URL
+            const API_BASE =
+                window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+                    ? "http://localhost:5000"
+                    : "https://lpuconnecttv.onrender.com"; // your Render backend URL
+
+            // Auth Handler
+            function handleAuth(event) {
+                event.preventDefault();
+                const email = document.getElementById("email").value;
+                const password = document.getElementById("password").value;
+                const department = document.getElementById("department").value;
+
+                fetch(`${API_BASE}/api/auth`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password, department }),
+                })
+                    .then(async (res) => {
+                        if (!res.ok) {
+                            const msg = await res.text();
+                            throw new Error(msg || "Authentication failed");
+                        }
+                        return res.json();
+                    })
+                    .then((data) => {
+                        localStorage.setItem("token", data.token);
+                        localStorage.setItem("email", data.email);
+                        hideModal("auth");
+                        startChat();
+                        showNotification(`Welcome ${data.email} from ${data.department}`, "success");
+                    })
+                    .catch((err) => {
+                        console.error("Auth error:", err);
+                        showNotification("Login failed: " + err.message, "danger");
+                    });
+            }
+        }
+
+
+        // Chat Functions
+        function startDemo() {
+            startChat();
+            showNotification('Demo mode activated! This is a sample interface.', 'info');
+        }
+
+        function startChat() {
+            document.getElementById('landing').style.display = 'none';
+            document.getElementById('chatInterface').style.display = 'flex';
+
+            // Simulate finding partner
+            setTimeout(() => {
+                const partnerStatus = document.querySelector('.video-box:last-child .status-indicator');
+                const partnerPlaceholder = document.querySelector('.video-box:last-child .video-placeholder');
+                partnerStatus.classList.remove('offline');
+                partnerPlaceholder.textContent = '👋 Partner Connected!';
+            }, 2000);
+        }
+
+        function nextPartner() {
+            const partnerStatus = document.querySelector('.video-box:last-child .status-indicator');
+            const partnerPlaceholder = document.querySelector('.video-box:last-child .video-placeholder');
+
+            partnerStatus.classList.add('offline');
+            partnerPlaceholder.textContent = '🔍 Finding new partner...';
+
+            // Clear chat
+            document.getElementById('chatMessages').innerHTML = '';
+
+            setTimeout(() => {
+                partnerStatus.classList.remove('offline');
+                partnerPlaceholder.textContent = '👋 New Partner Connected!';
+                addMessage('Partner', 'Hey! Nice to meet you!', false);
+            }, 3000);
+        }
+
+        function reportUser() {
+            fetch("/api/report", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Inappropriate behavior" })
+            });
+            showNotification("User reported.", "warning");
+        }
+
+        function endChat() {
+            fetch("/api/end", { method: "POST" });
+            document.getElementById("landing").style.display = "flex";
+            document.getElementById("chatInterface").style.display = "none";
+            showNotification("Chat ended.", "info");
+        }
+
+        // Chat Input Handler
+        function handleChatInput(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                const input = event.target;
+                const message = input.value.trim();
+
+                if (message) {
+                    rs
+                    addMessage('You', message, true);
+                    input.value = '';
+
+                    // Simulate partner response
+                    setTimeout(() => {
+                        const responses = [
+                            'That\'s interesting!',
+                            'I agree with you.',
+                            'Tell me more about that.',
+                            'Cool! What else?',
+                            'Nice to hear that!'
+                        ];
+                        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+                        addMessage('Partner', randomResponse, false);
+                    }, 1000 + Math.random() * 2000);
+                }
+            }
+        }
+
+        function addMessage(sender, text, isOwn) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Notification System
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--card-bg);
+                color: var(--text-primary);
+                padding: 1rem 1.5rem;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+                z-index: 2000;
+                max-width: 300px;
+                border-left: 4px solid var(--accent-blue);
+                animation: slideIn 0.3s ease-out;
+            `;
+
+            if (type === 'success') notification.style.borderLeftColor = 'var(--success)';
+            if (type === 'warning') notification.style.borderLeftColor = 'var(--warning)';
+            if (type === 'danger') notification.style.borderLeftColor = 'var(--danger)';
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-in forwards';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Add slide animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Close modal when clicking outside
+        window.onclick = function (event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        }
+    </script>
+    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9938f91cb51b45af',t:'MTc2MTMwMzY1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/server.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io("http://localhost:5000/api/auth"); // change if backend is on another domain
+        let localStream, peerConnection, partnerId;
+        const servers = { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] };
+
+        // Start chat and connect via WebRTC
+        function startChat() {
+            document.getElementById('landing').style.display = 'none';
+            document.getElementById('chatInterface').style.display = 'flex';
+            initCamera();
+
+            socket.emit("find-partner");
+            showNotification("🔍 Searching for a partner...", "info");
+        }
+
+        socket.on("waiting", () => {
+            showNotification("⏳ Waiting for another user to connect...", "info");
+        });
+
+        socket.on("partner-found", async (id) => {
+            partnerId = id;
+            showNotification("🎉 Partner found! Connecting video...", "success");
+            await createPeerConnection();
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
+        });
+
+        socket.on("signal", async ({ from, data }) => {
+            partnerId = from;
+            if (data.type === "offer") {
+                await createPeerConnection();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit("signal", { to: from, data: { type: "answer", answer } });
+            } else if (data.type === "answer") {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } else if (data.type === "candidate" && peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+        });
+
+        socket.on("partner-left", () => {
+            showNotification("❌ Partner disconnected.", "danger");
+            if (peerConnection) peerConnection.close();
+            peerConnection = null;
+            const remoteVideo = document.querySelector(".video-box:last-child video");
+            if (remoteVideo) remoteVideo.remove();
+        });
+
+        // CAMERA + CONNECTION
+        async function initCamera() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const videoBox = document.querySelector(".video-box:first-child");
+                const videoEl = document.createElement("video");
+                videoEl.srcObject = localStream;
+                videoEl.autoplay = true;
+                videoEl.muted = true;
+                videoEl.playsInline = true;
+                videoBox.innerHTML = "";
+                videoBox.appendChild(videoEl);
+            } catch (err) {
+                console.error("Camera error:", err);
+                showNotification("⚠️ Camera access denied.", "danger");
+            }
+        }
+
+        async function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(servers);
+
+            // Local stream to peer
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            // Remote stream
+            peerConnection.ontrack = (event) => {
+                const [stream] = event.streams;
+                const partnerBox = document.querySelector(".video-box:last-child");
+                partnerBox.innerHTML = "";
+                const videoEl = document.createElement("video");
+                videoEl.srcObject = stream;
+                videoEl.autoplay = true;
+                videoEl.playsInline = true;
+                partnerBox.appendChild(videoEl);
+            };
+
+            // ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && partnerId) {
+                    socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
+                }
+            };
+        }
+
+        // NEXT PARTNER
+        function nextPartner() {
+            if (peerConnection) peerConnection.close();
+            document.querySelector(".video-box:last-child").innerHTML = "<div class='video-placeholder'>⏳ Finding Partner...</div>";
+            socket.emit("find-partner");
+        }
+
+        // END CHAT
+        function endChat() {
+            if (peerConnection) peerConnection.close();
+            socket.emit("end-chat", { partnerId });
+            document.getElementById("landing").style.display = "flex";
+            document.getElementById("chatInterface").style.display = "none";
+            showNotification("Chat ended.", "info");
+        }
+    </script>
+
+</body>
+
+</html>
