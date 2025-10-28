@@ -814,167 +814,336 @@
             });
         }
     </script>
-   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-const socket = io("https://uni-connect-tv-5.onrender.com"); // your backend
-let localStream, peerConnection, partnerId;
+/*
+  Final production-ready client-side Socket.IO + WebRTC script.
+  - Uses peerConnection as single pc variable (consistent)
+  - Guards signaling state before setRemoteDescription
+  - Cleans up peers on disconnect / re-pair
+  - Fetches TURN servers if you expose /api/turn (recommended)
+  - Conservative bitrate + adaptive reduction for slow networks
+  - Safari/iOS friendly: requires user gesture to call startChat()
+*/
 
-const servers = {
-  iceServers: [
-    { urls: ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"] },
-    {
-      urls: "turn:relay1.expressturn.com:3478",
-      username: "openai_demo",
-      credential: "openai_demo",
-    },
-  ],
+const BACKEND_BASE =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:5000"
+    : "https://uni-connect-tv-5.onrender.com"; // <- your backend
+
+// Connect socket (prefer websocket transport)
+const socket = io(BACKEND_BASE, { transports: ["websocket"], reconnection: true });
+
+let peerConnection = null;   // main RTCPeerConnection instance
+let localStream = null;
+let partnerId = null;
+let iceServers = [
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+  // fallback public TURN (ok for dev). For production use Xirsys/Twilio and implement /api/turn on backend
+  { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
+];
+
+// Optional: fetch dynamic TURN from your backend (recommended if you set up a provider)
+async function fetchTurnIfAvailable() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/api/turn`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.iceServers) {
+        iceServers = json.iceServers;
+        console.log("Using dynamic ICE servers from backend:", iceServers);
+      }
+    }
+  } catch (e) {
+    console.warn("No dynamic TURN available; using fallback ICE servers.", e);
+  }
+}
+// fire-and-forget
+fetchTurnIfAvailable();
+
+// tuned media constraints
+const MEDIA_CONSTRAINTS = {
+  video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+  audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
 };
 
+// helper — show notification in UI (keeps your existing function name)
+function safeShowNotification(msg, type) {
+  try { showNotification(msg, type); } catch (e) { console.log("NOTIF:", type, msg); }
+}
 
-// 🎥 Initialize camera with fallback and stable audio
-async function initCamera() {
+// init local camera/mic (must be called from user gesture for Safari)
+async function initLocalMedia() {
+  if (localStream) return localStream;
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        frameRate: { ideal: 24 },
-      },
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
-
+    localStream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTRAINTS);
     const videoBox = document.querySelector(".video-box:first-child");
-    const videoEl = document.createElement("video");
-    videoEl.srcObject = localStream;
-    videoEl.autoplay = true;
-    videoEl.muted = true;
-    videoEl.playsInline = true;
-    videoBox.innerHTML = "";
-    videoBox.appendChild(videoEl);
-
+    if (videoBox) {
+      videoBox.innerHTML = "";
+      const v = document.createElement("video");
+      v.srcObject = localStream;
+      v.autoplay = true;
+      v.muted = true; // mute self preview
+      v.playsInline = true;
+      videoBox.appendChild(v);
+    }
+    return localStream;
   } catch (err) {
-    console.error("Camera error:", err);
-    showNotification("⚠️ Please allow camera & mic access.", "danger");
+    console.error("getUserMedia error:", err);
+    safeShowNotification("Please allow camera and microphone and click Start.", "danger");
+    throw err;
   }
 }
 
+// close & cleanup peer
+function closePeerConnection() {
+  try {
+    if (peerConnection) {
+      peerConnection.ontrack = null;
+      peerConnection.onicecandidate = null;
+      peerConnection.onconnectionstatechange = null;
+      peerConnection.onsignalingstatechange = null;
+      peerConnection.close();
+    }
+  } catch (e) { console.warn("closePeerConnection error:", e); }
+  peerConnection = null;
+  partnerId = null;
+  const partnerBox = document.querySelector(".video-box:last-child");
+  if (partnerBox) partnerBox.innerHTML = "<div class='video-placeholder'>🔍 Finding partner...</div>";
+}
 
-
+// create a new RTCPeerConnection and add local tracks
 async function createPeerConnection() {
-  peerConnection = new RTCPeerConnection(servers);
+  // cleanup if old exists
+  closePeerConnection();
 
+  peerConnection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
+
+  // debug logs
+  peerConnection.onsignalingstatechange = () => {
+    console.log("PC signalingState:", peerConnection.signalingState);
+  };
+  peerConnection.onconnectionstatechange = () => {
+    console.log("PC connectionState:", peerConnection.connectionState);
+    if (peerConnection.connectionState === "failed") {
+      safeShowNotification("Connection unstable—attempting to recover...", "warning");
+      try { peerConnection.restartIce(); } catch (e) { console.warn("restartIce failed", e); }
+    }
+  };
+
+  // add local tracks (ensure localStream exists)
+  if (!localStream) await initLocalMedia();
   localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
+  // when remote track arrives
   peerConnection.ontrack = (event) => {
     const [stream] = event.streams;
     const partnerBox = document.querySelector(".video-box:last-child");
-    partnerBox.innerHTML = "";
-    const videoEl = document.createElement("video");
-    videoEl.srcObject = stream;
-    videoEl.autoplay = true;
-    videoEl.playsInline = true;
-    partnerBox.appendChild(videoEl);
+    if (partnerBox) {
+      partnerBox.innerHTML = "";
+      const v = document.createElement("video");
+      v.srcObject = stream;
+      v.autoplay = true;
+      v.playsInline = true;
+      partnerBox.appendChild(v);
+      safeShowNotification("✅ Video connected", "success");
+    }
   };
 
+  // ICE candidate handler
   peerConnection.onicecandidate = (event) => {
     if (event.candidate && partnerId) {
-      socket.emit("signal", {
-        to: partnerId,
-        data: { type: "candidate", candidate: event.candidate },
-      });
+      socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
     }
   };
 
-  peerConnection.oniceconnectionstatechange = () => {
-    if (peerConnection.iceConnectionState === "failed") {
-      showNotification("⚠️ Weak connection. Reconnecting...", "warning");
-      peerConnection.restartIce();
+  // set a conservative default bitrate once connected
+  peerConnection.addEventListener("connectionstatechange", async () => {
+    if (peerConnection && peerConnection.connectionState === "connected") {
+      try {
+        const senders = peerConnection.getSenders();
+        senders.forEach(sender => {
+          if (sender.track && sender.track.kind === "video") {
+            const params = sender.getParameters();
+            if (!params.encodings) params.encodings = [{}];
+            params.encodings[0].maxBitrate = 700 * 1000; // ~700 kbps
+            sender.setParameters(params).catch(console.warn);
+          }
+        });
+      } catch (e) {
+        console.warn("bitrate set failed", e);
+      }
     }
-  };
+  });
+
+  return peerConnection;
 }
 
-function startChat() {
-  document.getElementById("landing").style.display = "none";
-  document.getElementById("chatInterface").style.display = "flex";
-  initCamera();
-  socket.emit("find-partner");
-  showNotification("🔍 Searching for a partner...", "info");
+// Monitor stats and reduce quality if needed
+async function monitorAndAdapt() {
+  if (!peerConnection) return;
+  try {
+    const stats = await peerConnection.getStats(null);
+    stats.forEach(report => {
+      if (report.type === "outbound-rtp" && report.kind === "video") {
+        // if bytesSent very low for a while, downscale
+        if (report.bytesSent < 200000) {
+          console.warn("Low outgoing bytes — reducing resolution");
+          const senders = (peerConnection.getSenders && peerConnection.getSenders()) || [];
+          senders.forEach(sender => {
+            if (sender.track && sender.track.kind === "video") {
+              const params = sender.getParameters();
+              if (!params.encodings) params.encodings = [{}];
+              params.encodings[0].scaleResolutionDownBy = 2; // lower res (e.g., 720 -> 360)
+              sender.setParameters(params).catch(console.warn);
+            }
+          });
+        }
+      }
+    });
+  } catch (e) {
+    console.debug("monitor error", e);
+  }
 }
+setInterval(monitorAndAdapt, 10000); // run every 10s
 
-socket.on("waiting", () => {
-  showNotification("⏳ Waiting for another user...", "info");
+// ----------------- Signaling handlers with guards -----------------
+socket.on("connect", () => {
+  console.log("Socket connected:", socket.id);
 });
 
+// server tells client it's waiting
+socket.on("waiting", () => {
+  safeShowNotification("⏳ Waiting for partner...", "info");
+});
+
+// server pairs and sends partner id
 socket.on("partner-found", async (id) => {
   partnerId = id;
-  showNotification("🎉 Partner found! Connecting video...", "success");
+  safeShowNotification("Partner found — connecting...", "success");
 
-  if (!localStream) await initCamera();
-  await createPeerConnection();
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
-});
-
-socket.on("signal", async ({ from, data }) => {
-  partnerId = from;
-
-  if (!pc) await createPeerConnectionAndAddTracks();
-
+  // ensure local media is ready and create pc
   try {
-    if (data.type === "offer") {
-      if (pc.signalingState !== "stable") {
-        console.warn("Ignoring offer because signalingState is", pc.signalingState);
-        return;
+    if (!localStream) await initLocalMedia();
+    if (!peerConnection) await createPeerConnection();
+
+    // create offer and send
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit("signal", { to: partnerId, data: { type: "offer", offer: offer } });
+
+    // safety timeout: if not connected in 7s, retry find-partner
+    setTimeout(() => {
+      if (!peerConnection || peerConnection.iceConnectionState !== "connected") {
+        safeShowNotification("Connection taking long — retrying.", "warning");
+        socket.emit("find-partner");
       }
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("signal", { to: from, data: { type: "answer", answer } });
-    } else if (data.type === "answer") {
-      if (pc.signalingState === "stable") {
-        console.warn("Already stable, ignoring answer");
-        return;
-      }
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-    } else if (data.type === "candidate" && pc) {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-    }
-  } catch (e) {
-    console.error("Signal handling error:", e);
+    }, 7000);
+  } catch (err) {
+    console.error("partner-found error:", err);
+    safeShowNotification("Error connecting to partner. Retrying...", "danger");
+    socket.emit("find-partner");
   }
 });
 
+// robust signal handler
+socket.on("signal", async ({ from, data }) => {
+  try {
+    partnerId = from;
 
-socket.on("partner-left", () => {
-  showNotification("❌ Partner disconnected.", "danger");
-  if (peerConnection) peerConnection.close();
-  peerConnection = null;
-  const partnerBox = document.querySelector(".video-box:last-child");
-  partnerBox.innerHTML = "<div class='video-placeholder'>Partner left.</div>";
+    // ensure peer exists
+    if (!peerConnection) await createPeerConnection();
+
+    // OFFER
+    if (data.type === "offer") {
+      // If currently not stable, refuse/ignore to avoid double-offer races
+      if (peerConnection.signalingState !== "stable") {
+        console.warn("Ignoring incoming offer — signalingState:", peerConnection.signalingState);
+        return;
+      }
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit("signal", { to: from, data: { type: "answer", answer } });
+
+    // ANSWER
+    } else if (data.type === "answer") {
+      // only set remote answer if we have a pending local offer
+      if (peerConnection.signalingState === "stable") {
+        console.warn("Received answer but signaling state is stable — ignoring.");
+        return;
+      }
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+
+    // ICE CANDIDATE
+    } else if (data.type === "candidate" && peerConnection) {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (e) {
+        console.warn("addIceCandidate warning:", e);
+      }
+    }
+  } catch (e) {
+    console.error("Signal processing error:", e);
+  }
 });
 
-function nextPartner() {
-  if (peerConnection) peerConnection.close();
-  document.querySelector(".video-box:last-child").innerHTML =
-    "<div class='video-placeholder'>⏳ Finding Partner...</div>";
-  socket.emit("find-partner");
+// partner left -> cleanup and auto-find
+socket.on("partner-left", () => {
+  safeShowNotification("Partner disconnected.", "warning");
+  closePeerConnection();
+  // small delay then try to find next partner
+  setTimeout(() => socket.emit("find-partner"), 1500);
+});
+
+// chat message from partner
+socket.on("chatMessage", ({ from, msg }) => {
+  addMessage("Partner", msg, false);
+});
+
+// ----------------- UI-exposed functions -----------------
+// called on user click to begin pairing (must be user gesture for mobiles)
+async function startChat() {
+  try {
+    await initLocalMedia(); // ensures camera started via user gesture
+    socket.emit("find-partner");
+  } catch (e) {
+    // user didn't allow camera/mic
+  }
 }
 
+// send chat message to partner via server
+function sendChatMessage(text) {
+  if (!text) return;
+  addMessage("You", text, true);
+  socket.emit("chatMessage", text);
+}
+
+// end chat manually
 function endChat() {
-  if (peerConnection) peerConnection.close();
-  socket.emit("end-chat", { partnerId });
-  document.getElementById("landing").style.display = "flex";
-  document.getElementById("chatInterface").style.display = "none";
-  showNotification("Chat ended.", "info");
+  socket.emit("end-chat");
+  closePeerConnection();
+  // show landing UI as needed
+  const landing = document.getElementById("landing");
+  const chatInterface = document.getElementById("chatInterface");
+  if (landing) landing.style.display = "flex";
+  if (chatInterface) chatInterface.style.display = "none";
 }
-</script>
 
+// cleanup before page unload
+window.addEventListener("beforeunload", () => {
+  try { socket.close(); } catch (e) {}
+  try { closePeerConnection(); } catch (e) {}
+});
+
+// expose for HTML buttons (if buttons call these names)
+window.startChat = startChat;
+window.endChat = endChat;
+window.sendChatMessage = sendChatMessage;
+
+</script>
    
         
 </body>
