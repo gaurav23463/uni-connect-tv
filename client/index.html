@@ -821,28 +821,24 @@ let localStream, peerConnection, partnerId;
 
 const servers = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
+    { urls: ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"] },
     {
-      urls: "turn:openrelay.metered.ca:80",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    {
-      urls: "turns:openrelay.metered.ca:443",
-      username: "openrelayproject",
-      credential: "openrelayproject",
+      urls: "turn:relay1.expressturn.com:3478",
+      username: "openai_demo",
+      credential: "openai_demo",
     },
   ],
 };
+
 
 // 🎥 Initialize camera with fallback and stable audio
 async function initCamera() {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({
       video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 24 },
       },
       audio: {
         echoCancellation: true,
@@ -852,18 +848,21 @@ async function initCamera() {
     });
 
     const videoBox = document.querySelector(".video-box:first-child");
-    videoBox.innerHTML = "";
     const videoEl = document.createElement("video");
     videoEl.srcObject = localStream;
     videoEl.autoplay = true;
     videoEl.muted = true;
     videoEl.playsInline = true;
+    videoBox.innerHTML = "";
     videoBox.appendChild(videoEl);
+
   } catch (err) {
-    console.error("Camera/Mic error:", err);
-    showNotification("⚠️ Please allow camera and microphone.", "danger");
+    console.error("Camera error:", err);
+    showNotification("⚠️ Please allow camera & mic access.", "danger");
   }
 }
+
+
 
 async function createPeerConnection() {
   peerConnection = new RTCPeerConnection(servers);
