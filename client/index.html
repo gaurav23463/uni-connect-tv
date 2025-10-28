@@ -737,7 +737,8 @@
                 const message = input.value.trim();
 
                 if (message) {
-                    rs
+                    socket.emit("chatMessage", message);
+
                     addMessage('You', message, true);
                     input.value = '';
 
