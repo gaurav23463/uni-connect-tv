@@ -469,17 +469,37 @@ function handleChatInput(event) {
     event.preventDefault();
     const input = event.target;
     const message = input.value.trim();
+
     if (!message) return;
-    addMessage("You", message, true);
+
+    if (!partnerId) {
+      addMessage("System", "⏳ Waiting for a partner to connect before sending...", false);
+      return;
+    }
+
+    // Send message
     socket.emit("chatMessage", { text: message });
+    addMessage("You", message, true);
     input.value = "";
   }
 }
 
-socket.on("chatMessage", (msg) => {
-  const text = typeof msg === "object" ? msg.text || JSON.stringify(msg) : msg;
-  addMessage("Partner", text, false);
+
+// Listen for chat messages
+socket.on("chatMessage", (data) => {
+  try {
+    // Handle both cases: object or stringified object
+    let parsed = typeof data === "string" ? JSON.parse(data) : data;
+
+    const sender = parsed.from === socket.id ? "You" : "Partner";
+    const messageText = parsed.msg?.text || parsed.msg || parsed.text || "📩 Message received";
+
+    addMessage(sender, messageText, sender === "You");
+  } catch (err) {
+    console.error("Message parse error:", err, data);
+  }
 });
+
 
 function addMessage(sender, text, isOwn) {
   const chatMessages = document.getElementById("chatMessages");
@@ -523,9 +543,16 @@ function reportUser() {
 
 // 🧪 DEMO
 function startDemo() {
-  startChat();
-  showNotification("Demo mode activated!", "info");
+  document.getElementById("landing").style.display = "none";
+  document.getElementById("chatInterface").style.display = "flex";
+
+  addMessage("System", "🎬 Demo mode: You're chatting with a virtual partner!", false);
+
+  setTimeout(() => {
+    addMessage("Partner", "Hey! I'm your demo partner 😊", false);
+  }, 1000);
 }
+
 
 // 🪄 NOTIFICATIONS (Non-overlapping)
 function showNotification(message, type = "info") {
