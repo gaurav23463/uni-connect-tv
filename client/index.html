@@ -923,18 +923,33 @@ socket.on("partner-found", async (id) => {
 
 socket.on("signal", async ({ from, data }) => {
   partnerId = from;
-  if (data.type === "offer") {
-    await createPeerConnection();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit("signal", { to: from, data: { type: "answer", answer } });
-  } else if (data.type === "answer") {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-  } else if (data.type === "candidate" && peerConnection) {
-    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+
+  if (!pc) await createPeerConnectionAndAddTracks();
+
+  try {
+    if (data.type === "offer") {
+      if (pc.signalingState !== "stable") {
+        console.warn("Ignoring offer because signalingState is", pc.signalingState);
+        return;
+      }
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("signal", { to: from, data: { type: "answer", answer } });
+    } else if (data.type === "answer") {
+      if (pc.signalingState === "stable") {
+        console.warn("Already stable, ignoring answer");
+        return;
+      }
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.type === "candidate" && pc) {
+      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+  } catch (e) {
+    console.error("Signal handling error:", e);
   }
 });
+
 
 socket.on("partner-left", () => {
   showNotification("❌ Partner disconnected.", "danger");
