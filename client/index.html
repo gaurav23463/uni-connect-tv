@@ -605,187 +605,332 @@
 
   <script>
   // ✅ Global backend URL
+ <script>
+       
+        // Theme Toggle
+        function toggleTheme() {
+            const body = document.body;
+            const themeToggle = document.querySelector('.theme-toggle');
+
+            if (body.getAttribute('data-theme') === 'light') {
+                body.removeAttribute('data-theme');
+                themeToggle.innerHTML = '🌙 Dark';
+            } else {
+                body.setAttribute('data-theme', 'light');
+                themeToggle.innerHTML = '☀️ Light';
+            }
+        }
+
+        // Modal Functions
+        function showModal(type) {
+            const modal = document.getElementById(type + 'Modal');
+            modal.classList.add('active');
+        }
+
+        function hideModal(type) {
+            const modal = document.getElementById(type + 'Modal');
+            modal.classList.remove('active');
+        }
+       
+            // Auth Handler
+           function handleAuth(event) {
+  event.preventDefault();
+
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const department = document.getElementById("department").value;
+
   const API_BASE =
     window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       ? "http://localhost:5000"
-      : "https://uni-connect-tv-5.onrender.com";
+      : "https://uni-connect-tv-5.onrender.com"; // ✅ Render backend
 
-  // Theme Toggle
-  function toggleTheme() {
-    const body = document.body;
-    const themeToggle = document.querySelector(".theme-toggle");
-
-    if (body.getAttribute("data-theme") === "light") {
-      body.removeAttribute("data-theme");
-      themeToggle.innerHTML = "🌙 Dark";
-    } else {
-      body.setAttribute("data-theme", "light");
-      themeToggle.innerHTML = "☀️ Light";
-    }
-  }
-
-  // Modal Functions
-  function showModal(type) {
-    const modal = document.getElementById(type + "Modal");
-    modal.classList.add("active");
-  }
-  function hideModal(type) {
-    const modal = document.getElementById(type + "Modal");
-    modal.classList.remove("active");
-  }
-
-  // ✅ Authentication
-  async function handleAuth(event) {
-    event.preventDefault();
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
-    const department = document.getElementById("department").value;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/auth`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, department }),
-      });
-
+  fetch(`${API_BASE}/api/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, department }),
+  })
+    .then(async (res) => {
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || "Authentication failed");
       }
-
-      const data = await res.json();
+      return res.json();
+    })
+    .then((data) => {
       localStorage.setItem("token", data.token);
       localStorage.setItem("email", data.email);
       hideModal("auth");
       startChat();
       showNotification(`Welcome ${data.email} from ${data.department}`, "success");
-    } catch (err) {
+    })
+    .catch((err) => {
       console.error("Auth error:", err);
       showNotification("Login failed: " + err.message, "danger");
-    }
-  }
-
-  // Chat Functions
-  function startDemo() {
-    startChat();
-    showNotification("Demo mode activated! This is a sample interface.", "info");
-  }
-
-  function startChat() {
-    document.getElementById("landing").style.display = "none";
-    document.getElementById("chatInterface").style.display = "flex";
-
-    // Simulate finding partner
-    setTimeout(() => {
-      const partnerStatus = document.querySelector(".video-box:last-child .status-indicator");
-      const partnerPlaceholder = document.querySelector(".video-box:last-child .video-placeholder");
-      partnerStatus.classList.remove("offline");
-      partnerPlaceholder.textContent = "👋 Partner Connected!";
-    }, 2000);
-  }
-
-  function nextPartner() {
-    const partnerStatus = document.querySelector(".video-box:last-child .status-indicator");
-    const partnerPlaceholder = document.querySelector(".video-box:last-child .video-placeholder");
-    partnerStatus.classList.add("offline");
-    partnerPlaceholder.textContent = "🔍 Finding new partner...";
-    document.getElementById("chatMessages").innerHTML = "";
-
-    setTimeout(() => {
-      partnerStatus.classList.remove("offline");
-      partnerPlaceholder.textContent = "👋 New Partner Connected!";
-      addMessage("Partner", "Hey! Nice to meet you!", false);
-    }, 3000);
-  }
-
-  function reportUser() {
-    fetch(`${API_BASE}/api/report`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Inappropriate behavior" }),
     });
-    showNotification("User reported.", "warning");
-  }
+}
 
-  function endChat() {
-    fetch(`${API_BASE}/api/end`, { method: "POST" });
-    document.getElementById("landing").style.display = "flex";
-    document.getElementById("chatInterface").style.display = "none";
-    showNotification("Chat ended.", "info");
-  }
+            }
 
-  // Chat Input Handler
-  function handleChatInput(event) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      const input = event.target;
-      const message = input.value.trim();
-      if (message) {
-        socket.emit("chatMessage", message);
-        addMessage("You", message, true);
-        input.value = "";
-      }
-    }
-  }
 
-  function addMessage(sender, text, isOwn) {
-    const chatMessages = document.getElementById("chatMessages");
-    const messageDiv = document.createElement("div");
-    messageDiv.className = `message ${isOwn ? "own" : "other"}`;
-    messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }
+        // Chat Functions
+        function startDemo() {
+            startChat();
+            showNotification('Demo mode activated! This is a sample interface.', 'info');
+        }
 
-  function showNotification(message, type = "info") {
-    const notification = document.createElement("div");
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: var(--card-bg);
-      color: var(--text-primary);
-      padding: 1rem 1.5rem;
-      border-radius: 12px;
-      box-shadow: var(--shadow);
-      z-index: 2000;
-      max-width: 300px;
-      border-left: 4px solid var(--accent-blue);
-      animation: slideIn 0.3s ease-out;
-    `;
-    if (type === "success") notification.style.borderLeftColor = "var(--success)";
-    if (type === "warning") notification.style.borderLeftColor = "var(--warning)";
-    if (type === "danger") notification.style.borderLeftColor = "var(--danger)";
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    setTimeout(() => {
-      notification.style.animation = "slideOut 0.3s ease-in forwards";
-      setTimeout(() => notification.remove(), 300);
-    }, 3000);
-  }
+        function startChat() {
+            document.getElementById('landing').style.display = 'none';
+            document.getElementById('chatInterface').style.display = 'flex';
 
-  const style = document.createElement("style");
-  style.textContent = `
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
-  `;
-  document.head.appendChild(style);
+            // Simulate finding partner
+            setTimeout(() => {
+                const partnerStatus = document.querySelector('.video-box:last-child .status-indicator');
+                const partnerPlaceholder = document.querySelector('.video-box:last-child .video-placeholder');
+                partnerStatus.classList.remove('offline');
+                partnerPlaceholder.textContent = '👋 Partner Connected!';
+            }, 2000);
+        }
 
-  window.onclick = function (event) {
-    const modals = document.querySelectorAll(".modal");
-    modals.forEach((modal) => {
-      if (event.target === modal) modal.classList.remove("active");
-    });
-  };
-</script>
+        function nextPartner() {
+            const partnerStatus = document.querySelector('.video-box:last-child .status-indicator');
+            const partnerPlaceholder = document.querySelector('.video-box:last-child .video-placeholder');
 
-<!-- ✅ Socket.IO -->
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script>
-  const socket = io("https://uni-connect-tv-5.onrender.com");
-  // ... (rest of your socket and video chat code)
-</script>
+            partnerStatus.classList.add('offline');
+            partnerPlaceholder.textContent = '🔍 Finding new partner...';
 
+            // Clear chat
+            document.getElementById('chatMessages').innerHTML = '';
+
+            setTimeout(() => {
+                partnerStatus.classList.remove('offline');
+                partnerPlaceholder.textContent = '👋 New Partner Connected!';
+                addMessage('Partner', 'Hey! Nice to meet you!', false);
+            }, 3000);
+        }
+
+        function reportUser() {
+            fetch(`${API_BASE}/api/report`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Inappropriate behavior" })
+            });
+            showNotification("User reported.", "warning");
+        }
+
+        function endChat() {
+            fetch(`${API_BASE}/api/end`, { method: "POST" });
+            document.getElementById("landing").style.display = "flex";
+            document.getElementById("chatInterface").style.display = "none";
+            showNotification("Chat ended.", "info");
+        }
+
+        // Chat Input Handler
+        function handleChatInput(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                const input = event.target;
+                const message = input.value.trim();
+
+                if (message) {
+                    socket.emit("chatMessage", message);
+
+                    addMessage('You', message, true);
+                    input.value = '';
+
+                    // Simulate partner response
+                    setTimeout(() => {
+                        const responses = [
+                            'That\'s interesting!',
+                            'I agree with you.',
+                            'Tell me more about that.',
+                            'Cool! What else?',
+                            'Nice to hear that!'
+                        ];
+                        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+                        addMessage('Partner', randomResponse, false);
+                    }, 1000 + Math.random() * 2000);
+                }
+            }
+        }
+
+        function addMessage(sender, text, isOwn) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Notification System
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--card-bg);
+                color: var(--text-primary);
+                padding: 1rem 1.5rem;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+                z-index: 2000;
+                max-width: 300px;
+                border-left: 4px solid var(--accent-blue);
+                animation: slideIn 0.3s ease-out;
+            `;
+
+            if (type === 'success') notification.style.borderLeftColor = 'var(--success)';
+            if (type === 'warning') notification.style.borderLeftColor = 'var(--warning)';
+            if (type === 'danger') notification.style.borderLeftColor = 'var(--danger)';
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-in forwards';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Add slide animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Close modal when clicking outside
+        window.onclick = function (event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        }
+    </script>
+    
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io("https://uni-connect-tv-5.onrender.com"); // change if backend is on another domain
+        let localStream, peerConnection, partnerId;
+        const servers = { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] };
+
+        // Start chat and connect via WebRTC
+        function startChat() {
+            document.getElementById('landing').style.display = 'none';
+            document.getElementById('chatInterface').style.display = 'flex';
+            initCamera();
+
+            socket.emit("find-partner");
+            showNotification("🔍 Searching for a partner...", "info");
+        }
+
+        socket.on("waiting", () => {
+            showNotification("⏳ Waiting for another user to connect...", "info");
+        });
+
+        socket.on("partner-found", async (id) => {
+            partnerId = id;
+            showNotification("🎉 Partner found! Connecting video...", "success");
+            await createPeerConnection();
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
+        });
+
+        socket.on("signal", async ({ from, data }) => {
+            partnerId = from;
+            if (data.type === "offer") {
+                await createPeerConnection();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit("signal", { to: from, data: { type: "answer", answer } });
+            } else if (data.type === "answer") {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } else if (data.type === "candidate" && peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+        });
+
+        socket.on("partner-left", () => {
+            showNotification("❌ Partner disconnected.", "danger");
+            if (peerConnection) peerConnection.close();
+            peerConnection = null;
+            const remoteVideo = document.querySelector(".video-box:last-child video");
+            if (remoteVideo) remoteVideo.remove();
+        });
+
+        // CAMERA + CONNECTION
+        async function initCamera() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const videoBox = document.querySelector(".video-box:first-child");
+                const videoEl = document.createElement("video");
+                videoEl.srcObject = localStream;
+                videoEl.autoplay = true;
+                videoEl.muted = true;
+                videoEl.playsInline = true;
+                videoBox.innerHTML = "";
+                videoBox.appendChild(videoEl);
+            } catch (err) {
+                console.error("Camera error:", err);
+                showNotification("⚠️ Camera access denied.", "danger");
+            }
+        }
+
+        async function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(servers);
+
+            // Local stream to peer
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            // Remote stream
+            peerConnection.ontrack = (event) => {
+                const [stream] = event.streams;
+                const partnerBox = document.querySelector(".video-box:last-child");
+                partnerBox.innerHTML = "";
+                const videoEl = document.createElement("video");
+                videoEl.srcObject = stream;
+                videoEl.autoplay = true;
+                videoEl.playsInline = true;
+                partnerBox.appendChild(videoEl);
+            };
+
+            // ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && partnerId) {
+                    socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
+                }
+            };
+        }
+
+        // NEXT PARTNER
+        function nextPartner() {
+            if (peerConnection) peerConnection.close();
+            document.querySelector(".video-box:last-child").innerHTML = "<div class='video-placeholder'>⏳ Finding Partner...</div>";
+            socket.emit("find-partner");
+        }
+
+        // END CHAT
+        function endChat() {
+            if (peerConnection) peerConnection.close();
+            socket.emit("end-chat", { partnerId });
+            document.getElementById("landing").style.display = "flex";
+            document.getElementById("chatInterface").style.display = "none";
+            showNotification("Chat ended.", "info");
+        }
+    </script> now its correct
 </body>
 
 </html>
