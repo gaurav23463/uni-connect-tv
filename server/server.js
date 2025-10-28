@@ -14,14 +14,14 @@ connectDB();
 
 const app = express();
 
-// ✅ Allow both local and deployed frontends
+// ✅ Proper CORS setup for both API & WebRTC
 app.use(
   cors({
     origin: [
-      "http://localhost:5500",
-      "http://localhost:3000",
-      "http://localhost:5000",
-      "https://uni-connect-tv.vercel.app",
+      "http://localhost:5500",        // local Live Server
+      "http://localhost:3000",        // React dev server
+      "http://localhost:5000",        // local backend
+      "https://uni-connect-tv-1.vercel.app", // ✅ your deployed frontend
     ],
     methods: ["GET", "POST"],
     credentials: true,
@@ -29,11 +29,13 @@ app.use(
 );
 
 app.use(express.json());
+app.use(express.static("public"));
 app.use("/api", authRoutes);
 app.use("/api", chatRoutes);
 
-// ✅ Create HTTP + Socket server
+//  Create HTTP + Socket.io server
 const httpServer = createServer(app);
+
 const io = new Server(httpServer, {
   cors: {
     origin: [
@@ -45,22 +47,20 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["websocket", "polling"],
+  transports: ["websocket", "polling"], // ensure socket fallback support
 });
 
-// ✅ Initialize video socket handler
+//  Initialize video socket handling
 videoSocketHandler(io);
 
-// ✅ Root endpoint for Render uptime
+//  Root endpoint for Render uptime
 app.get("/", (req, res) => {
   res.send("✅ Uni Connect TV backend running successfully!");
 });
 
-// ✅ Start server
+//  Start Server
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server live on port ${PORT}`);
-});
-
 });
 
