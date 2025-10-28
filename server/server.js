@@ -14,31 +14,9 @@ connectDB();
 
 const app = express();
 
-// ✅ Proper CORS setup for both API & WebRTC
+// ✅ Allow both local and deployed frontends
 app.use(
   cors({
-    origin: [
-      "http://localhost:5500",        // local Live Server
-      "http://localhost:3000",        // React dev server
-      "http://localhost:5000",        // local backend
-      "https://uni-connect-tv-1.vercel.app", // ✅ your deployed frontend
-    ],
-    methods: ["GET", "POST"],
-    credentials: true,
-  })
-);
-
-app.use(express.json());
-app.use(express.static("public"));
-app.use("/api", authRoutes);
-app.use("/api", chatRoutes);
-
-// ✅ Create HTTP + Socket.io server
-const httpServer = createServer(app);
-
-// ✅ Correct socket.io CORS setup for signaling
-const io = new Server(httpServer, {
-  cors: {
     origin: [
       "http://localhost:5500",
       "http://localhost:3000",
@@ -47,21 +25,42 @@ const io = new Server(httpServer, {
     ],
     methods: ["GET", "POST"],
     credentials: true,
+  })
+);
+
+app.use(express.json());
+app.use("/api", authRoutes);
+app.use("/api", chatRoutes);
+
+// ✅ Create HTTP + Socket server
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: [
+      "http://localhost:5500",
+      "http://localhost:3000",
+      "http://localhost:5000",
+      "https://uni-connect-tv-1.vercel.app",
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
   },
-  transports: ["websocket", "polling"], // ensure socket fallback support
+  transports: ["websocket", "polling"],
 });
 
-// ✅ Initialize video socket handling
+// ✅ Initialize video socket handler
 videoSocketHandler(io);
 
-// ✅ Keep server alive (Render auto-sleeps without this)
+// ✅ Root endpoint for Render uptime
 app.get("/", (req, res) => {
-  res.send("🎥 Uni Connect TV Backend is Running Successfully!");
+  res.send("✅ Uni Connect TV backend running successfully!");
 });
 
-// ✅ Start Server
+// ✅ Start server
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server live on port ${PORT}`);
+});
+
 });
 
