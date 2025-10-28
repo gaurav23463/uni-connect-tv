@@ -605,147 +605,139 @@
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-const API_BASE = window.location.hostname.includes("localhost")
-  ? "http://localhost:5000"
-  : "https://uni-connect-tv-5.onrender.com"; // your Render backend
-
-const socket = io(API_BASE);
-let peerConnection, localStream, partnerId;
-
-const servers = {
-  iceServers: [
-    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-    {
-      urls: "turn:relay1.expressturn.com:3478",
-      username: "efree",
-      credential: "efree",
-    },
-  ],
-  iceCandidatePoolSize: 10,
-};
-
-/* ======== MAIN CHAT LOGIC ======== */
-function startChat() {
-  document.getElementById("landing").style.display = "none";
-  document.getElementById("chatInterface").style.display = "flex";
-  initCamera();
-
-  socket.emit("find-partner");
-  showNotification("🔍 Searching for a partner...", "info");
-}
-
-/* ======== SOCKET EVENTS ======== */
-socket.on("waiting", () => showNotification("⏳ Waiting for another user...", "info"));
-
-socket.on("partner-found", async (id) => {
-  partnerId = id;
-  showNotification("🎉 Partner found! Connecting...", "success");
-  await createPeerConnection();
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
-});
-
-socket.on("signal", async ({ from, data }) => {
-  partnerId = from;
-  if (!peerConnection) await createPeerConnection();
-
-  if (data.type === "offer") {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit("signal", { to: from, data: { type: "answer", answer } });
-  } else if (data.type === "answer") {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-  } else if (data.type === "candidate" && data.candidate) {
-    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-  }
-});
-
-socket.on("partner-left", () => {
-  showNotification("❌ Partner disconnected.", "danger");
-  if (peerConnection) peerConnection.close();
-  peerConnection = null;
-  document.querySelector(".video-box:last-child").innerHTML =
-    "<div class='video-placeholder'>Partner left. Click Next to continue.</div>";
-});
-
-/* ======== CAMERA + CONNECTION ======== */
-async function initCamera() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    const videoBox = document.querySelector(".video-box:first-child");
-    videoBox.innerHTML = "";
-    const videoEl = document.createElement("video");
-    videoEl.srcObject = localStream;
-    videoEl.autoplay = true;
-    videoEl.muted = true;
-    videoEl.playsInline = true;
-    videoBox.appendChild(videoEl);
-  } catch (err) {
-    showNotification("⚠️ Camera access denied.", "danger");
-  }
-}
-
-async function createPeerConnection() {
-  peerConnection = new RTCPeerConnection(servers);
-
-  localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-
-  peerConnection.ontrack = (event) => {
-    const [stream] = event.streams;
-    const partnerBox = document.querySelector(".video-box:last-child");
-    partnerBox.innerHTML = "";
-    const videoEl = document.createElement("video");
-    videoEl.srcObject = stream;
-    videoEl.autoplay = true;
-    videoEl.playsInline = true;
-    partnerBox.appendChild(videoEl);
+  const socket = io("https://uni-connect-tv-5.onrender.com"); // your backend
+  let localStream, peerConnection, partnerId;
+  const servers = {
+    iceServers: [
+      { urls: ["stun:stun.l.google.com:19302"] },
+      { urls: ["stun:global.stun.twilio.com:3478?transport=udp"] }
+    ],
   };
 
-  peerConnection.onicecandidate = (event) => {
-    if (event.candidate && partnerId) {
-      socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
-    }
-  };
-}
+  // ✅ START CHAT
+  async function startChat() {
+    document.getElementById("landing").style.display = "none";
+    document.getElementById("chatInterface").style.display = "flex";
+    await initCamera();
 
-/* ======== BUTTONS ======== */
-function nextPartner() {
-  if (peerConnection) peerConnection.close();
-  socket.emit("find-partner");
-  showNotification("🔍 Searching for new partner...", "info");
-}
+    socket.emit("find-partner");
+    showNotification("🔍 Searching for partner...", "info");
+  }
 
-function reportUser() {
-  fetch(`${API_BASE}/api/report`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Reported by user" }),
+  // ✅ DEMO MODE
+  function startDemo() {
+    socket.emit("start-demo");
+    socket.on("demo-start", (data) => {
+      showNotification(data.message, "info");
+      document.getElementById("landing").style.display = "none";
+      document.getElementById("chatInterface").style.display = "flex";
+      initCamera();
+    });
+  }
+
+  // ✅ SOCKET EVENTS
+  socket.on("waiting", () => showNotification("⏳ Waiting for another user...", "info"));
+
+  socket.on("partner-found", async (id) => {
+    partnerId = id;
+    showNotification("🎉 Partner found! Connecting video...", "success");
+    await createPeerConnection();
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
   });
-  showNotification("🚨 User reported.", "warning");
-}
 
-function startDemo() {
-  showNotification("Demo mode started!", "info");
-  document.getElementById("landing").style.display = "none";
-  document.getElementById("chatInterface").style.display = "flex";
-}
+  socket.on("signal", async ({ from, data }) => {
+    partnerId = from;
+    if (!peerConnection) await createPeerConnection();
 
-function endChat() {
-  if (peerConnection) peerConnection.close();
-  socket.emit("end-chat", { partnerId });
-  document.getElementById("landing").style.display = "flex";
-  document.getElementById("chatInterface").style.display = "none";
-  showNotification("Chat ended.", "info");
-}
+    if (data.type === "offer") {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit("signal", { to: from, data: { type: "answer", answer } });
+    } else if (data.type === "answer" && peerConnection.signalingState === "have-local-offer") {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.type === "candidate" && data.candidate) {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (err) {
+        console.warn("ICE candidate error:", err);
+      }
+    }
+  });
 
-/* ======== UTIL ======== */
-function showNotification(msg, type) {
-  console.log(type.toUpperCase() + ": " + msg);
-}
+  socket.on("partner-left", () => {
+    showNotification("❌ Partner disconnected.", "danger");
+    if (peerConnection) peerConnection.close();
+    peerConnection = null;
+    document.querySelector(".video-box:last-child").innerHTML =
+      "<div class='video-placeholder'>🔍 Finding Partner...</div>";
+  });
+
+  // ✅ CAMERA + CONNECTION
+  async function initCamera() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true
+      });
+
+      const videoBox = document.querySelector(".video-box:first-child");
+      videoBox.innerHTML = "";
+      const videoEl = document.createElement("video");
+      videoEl.srcObject = localStream;
+      videoEl.autoplay = true;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      videoBox.appendChild(videoEl);
+    } catch (err) {
+      console.error("Camera error:", err);
+      showNotification("⚠️ Camera access denied.", "danger");
+    }
+  }
+
+  async function createPeerConnection() {
+    peerConnection = new RTCPeerConnection(servers);
+
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.ontrack = (event) => {
+      const [stream] = event.streams;
+      const partnerBox = document.querySelector(".video-box:last-child");
+      partnerBox.innerHTML = "";
+      const videoEl = document.createElement("video");
+      videoEl.srcObject = stream;
+      videoEl.autoplay = true;
+      videoEl.playsInline = true;
+      partnerBox.appendChild(videoEl);
+    };
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate && partnerId) {
+        socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
+      }
+    };
+  }
+
+  // ✅ NEXT PARTNER
+  function nextPartner() {
+    if (peerConnection) peerConnection.close();
+    peerConnection = null;
+    document.querySelector(".video-box:last-child").innerHTML =
+      "<div class='video-placeholder'>⏳ Finding Partner...</div>";
+    socket.emit("find-partner");
+  }
+
+  // ✅ END CHAT
+  function endChat() {
+    if (peerConnection) peerConnection.close();
+    socket.emit("end-chat", { partnerId });
+    document.getElementById("landing").style.display = "flex";
+    document.getElementById("chatInterface").style.display = "none";
+    showNotification("Chat ended.", "info");
+  }
 </script>
-
 
 
    
