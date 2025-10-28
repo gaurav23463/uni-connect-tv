@@ -14,53 +14,65 @@ connectDB();
 
 const app = express();
 
-// ✅ Proper CORS setup for both API & WebRTC
 app.use(
   cors({
     origin: [
-      "http://localhost:5500",        // local Live Server
-      "http://localhost:3000",        // React dev server
-      "http://localhost:5000",        // local backend
-      "https://uni-connect-tv-1.vercel.app", // ✅ your deployed frontend
+      "http://localhost:3000",
+      "http://localhost:5500",
+      "https://uni-connect-tv-1.vercel.app",
+      "https://uni-connect-tv-5.vercel.app",
     ],
-    methods: ["GET", "POST"],
     credentials: true,
   })
 );
 
 app.use(express.json());
-app.use(express.static("public"));
 app.use("/api", authRoutes);
 app.use("/api", chatRoutes);
 
-//  Create HTTP + Socket.io server
 const httpServer = createServer(app);
-
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      "http://localhost:5500",
-      "http://localhost:3000",
-      "http://localhost:5000",
-      "https://uni-connect-tv-1.vercel.app",
-    ],
+    origin: "*",
     methods: ["GET", "POST"],
-    credentials: true,
   },
-  transports: ["websocket", "polling"], // ensure socket fallback support
 });
 
-//  Initialize video socket handling
-videoSocketHandler(io);
+let waitingUser = null;
 
-//  Root endpoint for Render uptime
-app.get("/", (req, res) => {
-  res.send("✅ Uni Connect TV backend running successfully!");
+io.on("connection", (socket) => {
+  console.log("🔗 User connected:", socket.id);
+
+  socket.on("find-partner", () => {
+    if (waitingUser && waitingUser !== socket.id) {
+      const partnerId = waitingUser;
+      waitingUser = null;
+
+      socket.emit("partner-found", partnerId);
+      io.to(partnerId).emit("partner-found", socket.id);
+    } else {
+      waitingUser = socket.id;
+      socket.emit("waiting");
+    }
+  });
+
+  socket.on("signal", ({ to, data }) => {
+    io.to(to).emit("signal", { from: socket.id, data });
+  });
+
+  socket.on("chatMessage", (msg) => {
+    io.emit("chatMessage", { from: socket.id, msg });
+  });
+
+  socket.on("disconnect", () => {
+    if (waitingUser === socket.id) waitingUser = null;
+    socket.broadcast.emit("partner-left", socket.id);
+    console.log("❌ User disconnected:", socket.id);
+  });
 });
 
-//  Start Server
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server live on port ${PORT}`);
-});
+httpServer.listen(PORT, () =>
+  console.log(`🚀 Server running on port ${PORT}`)
+);
 
