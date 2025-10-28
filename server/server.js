@@ -21,7 +21,7 @@ app.use(
       "http://localhost:5500", // live server
       "http://localhost:3000", // react dev server
       "http://localhost:5000", // same origin (if served by express)
-      "uni-connect-tv-1.vercel.app" // your deployed frontend
+      "https://uni-connect-tv-1.vercel.app" // your deployed frontend
     ],
     credentials: true,
   })
