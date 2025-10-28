@@ -295,268 +295,262 @@
 
     <!-- ---------- SCRIPT: Socket.IO + WebRTC (clean, fixed) ---------- -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script>
-        /* ------------------ Configuration ------------------ */
-        const API_BASE = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')
-            ? 'http://localhost:5000'
-            : 'https://uni-connect-tv-5.onrender.com'; // update to your render domain if different
+<script>
+const API_BASE =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:5000"
+    : "https://uni-connect-tv-5.onrender.com";
 
-        // Connect to signaling/socket server
-        const SIGNALING_BASE = API_BASE; // same backend host for socket
-        const socket = io(SIGNALING_BASE, { transports: ['websocket'], reconnection: true });
+const socket = io(API_BASE);
+let localStream, peerConnection, partnerId;
+const servers = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ]
+};
 
-        /* ------------------ State ------------------ */
-        let localStream = null;
-        let peerConnection = null;
-        let partnerId = null;
+// 🌗 THEME TOGGLE
+function toggleTheme() {
+  const body = document.body;
+  const themeToggle = document.querySelector(".theme-toggle");
+  if (body.getAttribute("data-theme") === "light") {
+    body.removeAttribute("data-theme");
+    themeToggle.innerHTML = "🌙 Dark";
+  } else {
+    body.setAttribute("data-theme", "light");
+    themeToggle.innerHTML = "☀️ Light";
+  }
+}
 
-        // STUN/TURN servers: keep public STUN and a fallback TURN (replace with your TURN for production)
-        const servers = {
-            iceServers: [
-                { urls: ['stun:stun.l.google.com:19302'] },
-                // Example public relay (not ideal for production). Replace with your TURN creds when available.
-                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-            ]
-        };
+// 🪟 MODALS
+function showModal(type) {
+  const modal = document.getElementById(type + "Modal");
+  if (modal) modal.classList.add("active");
+}
+function hideModal(type) {
+  const modal = document.getElementById(type + "Modal");
+  if (modal) modal.classList.remove("active");
+}
 
-        /* ------------------ Socket event handlers ------------------ */
-        socket.on('connect', () => console.log('socket connected', socket.id));
-        socket.on('waiting', () => showNotification('⏳ Waiting for partner...', 'info'));
-        socket.on('partner-found', async (id) => {
-            partnerId = id;
-            showNotification('🎉 Partner found! Connecting video...', 'success');
-            try {
-                await createPeerConnection();
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                socket.emit('signal', { to: partnerId, data: { type: 'offer', offer } });
-            } catch (err) {
-                console.error('Error creating offer:', err);
-            }
-        });
+// ✅ AUTH HANDLER
+async function handleAuth(event) {
+  event.preventDefault();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const department = document.getElementById("department").value;
 
-        socket.on('signal', async ({ from, data }) => {
-            partnerId = from;
-            try {
-                if (data.type === 'offer') {
-                    await createPeerConnection();
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    socket.emit('signal', { to: from, data: { type: 'answer', answer } });
-                } else if (data.type === 'answer') {
-                    // ensure correct state before setting remote answer
-                    if (peerConnection && (peerConnection.signalingState === 'have-local-offer' || peerConnection.signalingState === 'stable')) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    } else {
-                        console.warn('Ignored answer: wrong signaling state', peerConnection ? peerConnection.signalingState : 'no pc');
-                    }
-                } else if (data.type === 'candidate' && data.candidate) {
-                    try {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    } catch (err) {
-                        console.warn('addIceCandidate failed:', err);
-                    }
-                }
-            } catch (err) {
-                console.error('Signal handling error:', err);
-            }
-        });
+  try {
+    const res = await fetch(`${API_BASE}/api/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, department }),
+    });
 
-        socket.on('partner-left', () => {
-            showNotification('❌ Partner disconnected.', 'warning');
-            cleanupPeer();
-            // reset remote placeholder
-            const remoteBox = document.getElementById('remoteBox');
-            remoteBox.innerHTML = '<div class="video-label">Partner</div><div class="video-placeholder">⏳ Finding Partner...</div><div class="status-indicator offline" id="remoteStatus"></div>';
-        });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
 
-        // receive text chat messages
-        socket.on('chatMessage', (payload) => {
-            if (payload && payload.message) addMessage('Partner', payload.message, false);
-        });
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("email", data.email);
 
-        /* ------------------ Core functions ------------------ */
-        async function startChat() {
-            // show interface
-            document.getElementById('landing').style.display = 'none';
-            document.getElementById('chatInterface').style.display = 'flex';
-            await ensureLocalStream();
-            socket.emit('find-partner');
-            showNotification('🔍 Searching for a partner...', 'info');
-        }
+    hideModal("auth");
+    startChat();
+    showNotification(`Welcome ${data.email}`, "success");
+  } catch (err) {
+    console.error(err);
+    showNotification("Login failed: " + err.message, "danger");
+  }
+}
 
-        function startDemo() {
-            // Demo uses client-side simulation: show UI and camera but doesn't require a partner
-            document.getElementById('landing').style.display = 'none';
-            document.getElementById('chatInterface').style.display = 'flex';
-            ensureLocalStream().then(() => {
-                showNotification('Demo mode activated! This is a sample interface.', 'info');
-                // Optionally populate demo chat
-                addMessage('Partner', "Hey! This is demo partner. Say hi!", false);
-            });
-        }
+// 🚀 START CHAT
+function startChat() {
+  document.getElementById("landing").style.display = "none";
+  const chatInterface = document.getElementById("chatInterface");
+  chatInterface.style.display = "flex";
 
-        async function ensureLocalStream() {
-            if (localStream) return localStream;
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: true });
-                const localBox = document.getElementById('localBox');
-                localBox.innerHTML = '<div class="video-label">You</div>';
-                const videoEl = document.createElement('video');
-                videoEl.srcObject = localStream;
-                videoEl.autoplay = true;
-                videoEl.muted = true;
-                videoEl.playsInline = true;
-                videoEl.style.width = '100%';
-                videoEl.style.height = '100%';
-                localBox.appendChild(videoEl);
-                // set local status indicator
-                const localStatus = document.getElementById('localStatus');
-                if (localStatus) localStatus.classList.remove('offline');
-                return localStream;
-            } catch (err) {
-                console.error('Camera/mic access error:', err);
-                showNotification('⚠️ Camera/mic access denied. Allow permissions and refresh.', 'danger');
-                throw err;
-            }
-        }
+  initCamera();
+  socket.emit("find-partner");
+  showNotification("🔍 Searching for a partner...", "info");
+}
 
-        async function createPeerConnection() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            peerConnection = new RTCPeerConnection(servers);
+// 🎥 CAMERA
+async function initCamera() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const videoBox = document.querySelector(".video-box:first-child");
+    videoBox.innerHTML = "";
+    const videoEl = document.createElement("video");
+    videoEl.srcObject = localStream;
+    videoEl.autoplay = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoBox.appendChild(videoEl);
+  } catch (err) {
+    console.error("Camera error:", err);
+    showNotification("⚠️ Camera or mic access denied.", "danger");
+  }
+}
 
-            // Add local tracks
-            await ensureLocalStream();
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+// ⚙️ PEER CONNECTION
+async function createPeerConnection() {
+  peerConnection = new RTCPeerConnection(servers);
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-            // handle remote stream
-            peerConnection.ontrack = (event) => {
-                const [stream] = event.streams;
-                const remoteBox = document.getElementById('remoteBox');
-                remoteBox.innerHTML = '<div class="video-label">Partner</div>';
-                const remoteVideo = document.createElement('video');
-                remoteVideo.srcObject = stream;
-                remoteVideo.autoplay = true;
-                remoteVideo.playsInline = true;
-                remoteVideo.style.width = '100%';
-                remoteVideo.style.height = '100%';
-                remoteBox.appendChild(remoteVideo);
-                // update status indicator
-                const remoteStatus = document.getElementById('remoteStatus');
-                if (remoteStatus) remoteStatus.classList.remove('offline');
-            };
+  peerConnection.ontrack = (event) => {
+    const [remoteStream] = event.streams;
+    const partnerBox = document.querySelector(".video-box:last-child");
+    partnerBox.innerHTML = "";
+    const videoEl = document.createElement("video");
+    videoEl.srcObject = remoteStream;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    partnerBox.appendChild(videoEl);
+  };
 
-            // ICE candidates -> send to partner via socket
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate && partnerId) {
-                    socket.emit('signal', { to: partnerId, data: { type: 'candidate', candidate: e.candidate } });
-                }
-            };
+  peerConnection.onicecandidate = (event) => {
+    if (event.candidate && partnerId) {
+      socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
+    }
+  };
 
-            // optional: connection state handling
-            peerConnection.onconnectionstatechange = () => {
-                console.log('Peer connection state:', peerConnection.connectionState);
-                if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-                    showNotification('Connection problem. Trying to reconnect...', 'warning');
-                }
-            };
-        }
+  peerConnection.onconnectionstatechange = () => {
+    console.log("Connection:", peerConnection.connectionState);
+    if (peerConnection.connectionState === "failed" || peerConnection.connectionState === "disconnected") {
+      showNotification("⚠️ Partner disconnected. Reconnecting...", "warning");
+      socket.emit("find-partner");
+    }
+  };
+}
 
-        function cleanupPeer() {
-            try {
-                if (peerConnection) {
-                    peerConnection.ontrack = null;
-                    peerConnection.onicecandidate = null;
-                    peerConnection.close();
-                }
-            } catch (e) { console.warn(e); }
-            peerConnection = null;
-            partnerId = null;
-        }
+// 🔄 SOCKET EVENTS
+socket.on("connect", () => console.log("socket connected", socket.id));
 
-        /* ------------------ Buttons: Next / Report / End ------------------ */
-        function nextPartner() {
-            // close existing connection and ask for new partner
-            cleanupPeer();
-            document.getElementById('remoteBox').innerHTML = '<div class="video-label">Partner</div><div class="video-placeholder">⏳ Finding Partner...</div><div class="status-indicator offline" id="remoteStatus"></div>';
-            socket.emit('find-partner');
-            showNotification('🔍 Looking for a new partner...', 'info');
-            // clear chat
-            document.getElementById('chatMessages').innerHTML = '';
-        }
+socket.on("waiting", () => {
+  showNotification("⏳ Waiting for another user...", "info");
+});
 
-        function reportUser() {
-            // call backend report endpoint (if present)
-            fetch(`${API_BASE}/api/report`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userEmail: localStorage.getItem('email') || 'anonymous', reason: 'Inappropriate behavior' })
-            }).catch(err => console.warn('report error:', err));
-            showNotification('User reported.', 'warning');
-        }
+socket.on("partner-found", async (id) => {
+  partnerId = id;
+  showNotification("🎉 Partner found! Connecting...", "success");
+  await createPeerConnection();
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
+});
 
-        function endChat() {
-            socket.emit('end-chat', { partnerId });
-            cleanupPeer();
-            document.getElementById('chatInterface').style.display = 'none';
-            document.getElementById('landing').style.display = 'block';
-            showNotification('Chat ended.', 'info');
-        }
+socket.on("signal", async ({ from, data }) => {
+  partnerId = from;
+  if (data.type === "offer") {
+    await createPeerConnection();
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit("signal", { to: from, data: { type: "answer", answer } });
+  } else if (data.type === "answer") {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+  } else if (data.type === "candidate" && peerConnection) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+});
 
-        /* ------------------ Chat input & messages ------------------ */
-        function handleChatInput(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const input = document.getElementById('chatInput');
-                const message = input.value.trim();
-                if (!message) return;
-                addMessage('You', message, true);
-                socket.emit('chatMessage', { message });
-                input.value = '';
-            }
-        }
+socket.on("partner-left", () => {
+  showNotification("❌ Partner disconnected.", "danger");
+  if (peerConnection) peerConnection.close();
+  const remoteBox = document.querySelector(".video-box:last-child");
+  remoteBox.innerHTML = "<div class='video-placeholder'>Partner left</div>";
+});
 
-        function addMessage(sender, text, isOwn) {
-            const chatMessages = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message ' + (isOwn ? 'own' : 'other');
-            messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
+// 💬 CHAT
+function handleChatInput(event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    const input = event.target;
+    const message = input.value.trim();
+    if (!message) return;
 
-        /* ------------------ Auth handler (clean) ------------------ */
-        async function handleAuth(evt) {
-            evt.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const department = document.getElementById('department').value;
+    addMessage("You", message, true);
+    socket.emit("chatMessage", message);
+    input.value = "";
+  }
+}
 
-            try {
-                const res = await fetch(`${API_BASE}/api/auth`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, department })
-                });
-                if (!res.ok) {
-                    const txt = await res.text();
-                    throw new Error(txt || 'Authentication failed');
-                }
-                const data = await res.json();
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('email', data.email);
-                hideModal('auth');
-                startChat();
-                showNotification(`Welcome ${data.email} from ${data.department}`, 'success');
-            } catch (err) {
-                console.error('Auth error:', err);
-                showNotification('Login failed: ' + (err.message || err), 'danger');
-            }
-        }
-    </script>
+socket.on("chatMessage", (msg) => {
+  addMessage("Partner", msg, false);
+});
+
+function addMessage(sender, text, isOwn) {
+  const chatMessages = document.getElementById("chatMessages");
+  const msgDiv = document.createElement("div");
+  msgDiv.className = `message ${isOwn ? "own" : "other"}`;
+  msgDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  chatMessages.appendChild(msgDiv);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// 🧭 NEXT / END / REPORT
+function nextPartner() {
+  if (peerConnection) peerConnection.close();
+  socket.emit("find-partner");
+  const partnerBox = document.querySelector(".video-box:last-child");
+  partnerBox.innerHTML = "<div class='video-placeholder'>⏳ Finding Partner...</div>";
+}
+
+function endChat() {
+  if (peerConnection) peerConnection.close();
+  socket.emit("end-chat", { partnerId });
+
+  document.getElementById("chatInterface").style.display = "none";
+  const landing = document.getElementById("landing");
+  landing.style.display = "flex";
+  landing.style.justifyContent = "center";
+  landing.style.alignItems = "center";
+  landing.style.flexDirection = "column";
+  showNotification("Chat ended.", "info");
+}
+
+function reportUser() {
+  fetch(`${API_BASE}/api/report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Inappropriate behavior" }),
+  });
+  showNotification("User reported.", "warning");
+}
+
+// 🧪 DEMO
+function startDemo() {
+  startChat();
+  showNotification("Demo mode activated!", "info");
+}
+
+// 🪄 NOTIFICATIONS
+function showNotification(message, type = "info") {
+  const notification = document.createElement("div");
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px; right: 20px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    z-index: 2000;
+    max-width: 300px;
+    border-left: 4px solid var(--accent-blue);
+    animation: slideIn 0.3s ease-out;
+  `;
+  if (type === "success") notification.style.borderLeftColor = "var(--success)";
+  if (type === "warning") notification.style.borderLeftColor = "var(--warning)";
+  if (type === "danger") notification.style.borderLeftColor = "var(--danger)";
+
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  setTimeout(() => {
+    notification.style.animation = "slideOut 0.3s ease-in forwards";
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+}
+</script>
+
 </body>
 </html>
