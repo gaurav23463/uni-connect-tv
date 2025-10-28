@@ -603,155 +603,41 @@
         </div>
     </div>
 
- <script>
-/* ========== UI + Auth + Chat helpers (fixed) ========== */
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
 
-// base API URL (single source)
-const API_BASE = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? "http://localhost:5000"
-  : "https://uni-connect-tv-5.onrender.com"; // no leading space
+// ✅ Backend base
+const API_BASE =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:5000"
+    : "https://uni-connect-tv-5.onrender.com";
 
-// Theme Toggle
+/* ---------- THEME TOGGLE ---------- */
 function toggleTheme() {
   const body = document.body;
-  const themeToggle = document.querySelector('.theme-toggle');
-  if (body.getAttribute('data-theme') === 'light') {
-    body.removeAttribute('data-theme');
-    themeToggle.innerHTML = '🌙 Dark';
+  const themeToggle = document.querySelector(".theme-toggle");
+  if (body.getAttribute("data-theme") === "light") {
+    body.removeAttribute("data-theme");
+    themeToggle.innerHTML = "🌙 Dark";
   } else {
-    body.setAttribute('data-theme', 'light');
-    themeToggle.innerHTML = '☀️ Light';
+    body.setAttribute("data-theme", "light");
+    themeToggle.innerHTML = "☀️ Light";
   }
 }
 
-// Modal Functions
+/* ---------- MODALS ---------- */
 function showModal(type) {
-  const modal = document.getElementById(type + 'Modal');
-  if (modal) modal.classList.add('active');
+  const modal = document.getElementById(type + "Modal");
+  modal?.classList.add("active");
 }
 function hideModal(type) {
-  const modal = document.getElementById(type + 'Modal');
-  if (modal) modal.classList.remove('active');
+  const modal = document.getElementById(type + "Modal");
+  modal?.classList.remove("active");
 }
 
-// Auth Handler (single correctly-scoped function)
-async function handleAuth(event) {
-  event.preventDefault();
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
-  const department = document.getElementById("department").value;
-
-  try {
-    const res = await fetch(`${API_BASE}/api/auth`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, department }),
-    });
-
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || "Authentication failed");
-    }
-
-    const data = await res.json();
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("email", data.email);
-    hideModal("auth");
-    startChat(); // show chat interface after successful login
-    showNotification(`Welcome ${data.email} from ${data.department}`, "success");
-  } catch (err) {
-    console.error("Auth error:", err);
-    showNotification("Login failed: " + (err.message || "Server error"), "danger");
-  }
-}
-
-// Chat / UI functions
-function startDemo() {
-  startChat();
-  showNotification('Demo mode activated! This is a sample interface.', 'info');
-}
-
-function startChat() {
-  document.getElementById('landing').style.display = 'none';
-  document.getElementById('chatInterface').style.display = 'flex';
-  // the real WebRTC start will be handled in the socket/webrtc block (initCamera will be called there)
-}
-
-function nextPartner() {
-  const partnerStatus = document.querySelector('.video-box:last-child .status-indicator');
-  const partnerPlaceholder = document.querySelector('.video-box:last-child .video-placeholder');
-
-  if (partnerStatus) partnerStatus.classList.add('offline');
-  if (partnerPlaceholder) partnerPlaceholder.textContent = '🔍 Finding new partner...';
-
-  // Clear chat
-  const chatMessages = document.getElementById('chatMessages');
-  if (chatMessages) chatMessages.innerHTML = '';
-
-  setTimeout(() => {
-    if (partnerStatus) partnerStatus.classList.remove('offline');
-    if (partnerPlaceholder) partnerPlaceholder.textContent = '👋 New Partner Connected!';
-    addMessage('Partner', 'Hey! Nice to meet you!', false);
-  }, 3000);
-}
-
-function reportUser() {
-  fetch(`${API_BASE}/api/report`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Inappropriate behavior" })
-  }).catch(e => console.warn("report failed", e));
-  showNotification("User reported.", "warning");
-}
-
-function endChat() {
-  fetch(`${API_BASE}/api/end`, { method: "POST" }).catch(e => console.warn("end failed", e));
-  document.getElementById("landing").style.display = "flex";
-  document.getElementById("chatInterface").style.display = "none";
-  showNotification("Chat ended.", "info");
-}
-
-// Chat Input Handler (fixed — removed stray token 'rs')
-function handleChatInput(event) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    const input = event.target;
-    const message = input.value.trim();
-
-    if (message) {
-      // when integrated with socket.io you should emit here: socket.emit("chatMessage", message);
-      addMessage('You', message, true);
-      input.value = '';
-
-      // Simulate partner response (demo only)
-      setTimeout(() => {
-        const responses = [
-          "That's interesting!",
-          "I agree with you.",
-          "Tell me more about that.",
-          "Cool! What else?",
-          "Nice to hear that!"
-        ];
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        addMessage('Partner', randomResponse, false);
-      }, 1000 + Math.random() * 2000);
-    }
-  }
-}
-
-function addMessage(sender, text, isOwn) {
-  const chatMessages = document.getElementById('chatMessages');
-  if (!chatMessages) return;
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
-  messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
-  chatMessages.appendChild(messageDiv);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Notification System (unchanged)
-function showNotification(message, type = 'info') {
-  const notification = document.createElement('div');
+/* ---------- NOTIFICATIONS ---------- */
+function showNotification(message, type = "info") {
+  const notification = document.createElement("div");
   notification.style.cssText = `
     position: fixed;
     top: 20px;
@@ -766,225 +652,198 @@ function showNotification(message, type = 'info') {
     border-left: 4px solid var(--accent-blue);
     animation: slideIn 0.3s ease-out;
   `;
-  if (type === 'success') notification.style.borderLeftColor = 'var(--success)';
-  if (type === 'warning') notification.style.borderLeftColor = 'var(--warning)';
-  if (type === 'danger') notification.style.borderLeftColor = 'var(--danger)';
+  if (type === "success") notification.style.borderLeftColor = "var(--success)";
+  if (type === "warning") notification.style.borderLeftColor = "var(--warning)";
+  if (type === "danger") notification.style.borderLeftColor = "var(--danger)";
   notification.textContent = message;
   document.body.appendChild(notification);
   setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease-in forwards';
+    notification.style.animation = "slideOut 0.3s ease-in forwards";
     setTimeout(() => notification.remove(), 300);
   }, 3000);
 }
-
-// add slide animations CSS
-const style = document.createElement('style');
+const style = document.createElement("style");
 style.textContent = `
   @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
 `;
 document.head.appendChild(style);
 
-// Close modals when clicking outside
-window.onclick = function (event) {
-  const modals = document.querySelectorAll('.modal');
-  modals.forEach(modal => {
-    if (event.target === modal) modal.classList.remove('active');
-  });
+/* ---------- AUTH ---------- */
+async function handleAuth(event) {
+  event.preventDefault();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const department = document.getElementById("department").value;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, department }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("email", data.email);
+    hideModal("auth");
+    openChatUI();
+    showNotification(`Welcome ${data.email}`, "success");
+    startVideoChat(); // 🔥 start after successful login
+  } catch (err) {
+    console.error("Auth error:", err);
+    showNotification("Login failed: " + err.message, "danger");
+  }
 }
-</script>
 
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script>
-/* ========== Socket.IO + WebRTC (fixed) ========== */
+/* ---------- UI SWITCH ---------- */
+function openChatUI() {
+  document.getElementById("landing").style.display = "none";
+  document.getElementById("chatInterface").style.display = "flex";
+}
 
-// Use deployment-appropriate backend
-const SIGNALING_BASE = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? "http://localhost:5000"
-  : "https://uni-connect-tv-5.onrender.com";
+/* ---------- SOCKET + WEBRTC ---------- */
+const SIGNALING_BASE =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:5000"
+    : "https://uni-connect-tv-5.onrender.com";
 
-// connect socket to backend root (do NOT use /api/auth)
 const socket = io(SIGNALING_BASE, { transports: ["websocket"], reconnection: true });
+let localStream = null, peerConnection = null, partnerId = null;
 
-let localStream = null;
-let peerConnection = null;
-let partnerId = null;
-
-// STUN/TURN servers (use a real TURN for production)
 const servers = {
   iceServers: [
     { urls: ["stun:stun.l.google.com:19302"] },
-    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
-  ]
+    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+  ],
 };
 
-// ensure we init camera before creating offer/adding tracks
+/* ---------- CAMERA ---------- */
 async function initCamera() {
-  if (localStream) return localStream;
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: true });
-    const videoBox = document.querySelector(".video-box:first-child");
-    if (videoBox) {
-      videoBox.innerHTML = "";
-      const videoEl = document.createElement("video");
-      videoEl.srcObject = localStream;
-      videoEl.autoplay = true;
-      videoEl.muted = true; // self-preview muted
-      videoEl.playsInline = true;
-      videoBox.appendChild(videoEl);
-    }
-    return localStream;
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480 },
+      audio: true,
+    });
+    const myBox = document.querySelector(".video-box:first-child");
+    myBox.innerHTML = "";
+    const myVideo = document.createElement("video");
+    myVideo.srcObject = localStream;
+    myVideo.autoplay = true;
+    myVideo.muted = true;
+    myVideo.playsInline = true;
+    myBox.appendChild(myVideo);
   } catch (err) {
     console.error("Camera error:", err);
-    showNotification("⚠️ Camera access denied.", "danger");
-    throw err;
+    showNotification("Camera access denied", "danger");
   }
 }
 
+/* ---------- PEER CONNECTION ---------- */
 async function createPeerConnection() {
-  // If a previous peer exists, close it cleanly
-  if (peerConnection) {
-    try { peerConnection.close(); } catch (e) {}
-    peerConnection = null;
-  }
-
+  if (peerConnection) peerConnection.close();
   peerConnection = new RTCPeerConnection(servers);
 
-  // Defensive: ensure local stream is ready
   if (!localStream) await initCamera();
-
-  // Add local tracks
   localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-  // Remote track handler
   peerConnection.ontrack = (event) => {
     const [stream] = event.streams;
     const partnerBox = document.querySelector(".video-box:last-child");
-    if (partnerBox) {
-      partnerBox.innerHTML = "";
-      const videoEl = document.createElement("video");
-      videoEl.srcObject = stream;
-      videoEl.autoplay = true;
-      videoEl.playsInline = true;
-      partnerBox.appendChild(videoEl);
-    }
+    partnerBox.innerHTML = "";
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.autoplay = true;
+    video.playsInline = true;
+    partnerBox.appendChild(video);
   };
 
-  // ICE
-  peerConnection.onicecandidate = (event) => {
-    if (event.candidate && partnerId) {
-      socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
-    }
+  peerConnection.onicecandidate = (e) => {
+    if (e.candidate && partnerId)
+      socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: e.candidate } });
   };
-
-  // signaling state debug
-  peerConnection.onsignalingstatechange = () => {
-    console.log("Signaling state:", peerConnection.signalingState);
-  };
-
-  // connection state handlers: restart ICE on failure
-  peerConnection.oniceconnectionstatechange = () => {
-    console.log("ICE state:", peerConnection.iceConnectionState);
-    if (peerConnection.iceConnectionState === "failed") {
-      try { peerConnection.restartIce(); } catch (e) { console.warn(e); }
-    }
-  };
-
-  return peerConnection;
 }
 
-// Signaling handlers
-socket.on("connect", () => console.log("socket connected", socket.id));
-socket.on("waiting", () => showNotification("⏳ Waiting for a partner...", "info"));
-
+/* ---------- SIGNALING ---------- */
+socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
+socket.on("waiting", () => showNotification("Waiting for a partner...", "info"));
 socket.on("partner-found", async (id) => {
   partnerId = id;
-  showNotification("🎉 Partner found! Connecting...", "success");
-  try {
-    await initCamera();
-    await createPeerConnection();
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
-
-    // safety: if no connection in 7s, retry
-    setTimeout(() => {
-      if (!peerConnection || peerConnection.iceConnectionState !== "connected") {
-        showNotification("Connection taking long — retrying...", "warning");
-        socket.emit("find-partner");
-      }
-    }, 7000);
-  } catch (e) {
-    console.error("Error creating offer:", e);
-    socket.emit("find-partner");
-  }
+  showNotification("Partner found! Connecting...", "success");
+  await createPeerConnection();
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
 });
-
 socket.on("signal", async ({ from, data }) => {
   partnerId = from;
+  if (!peerConnection) await createPeerConnection();
   try {
-    if (!peerConnection) await createPeerConnection();
-
     if (data.type === "offer") {
-      // avoid race: only accept offer when stable
-      if (peerConnection.signalingState !== "stable") {
-        console.warn("Ignoring offer; signalingState:", peerConnection.signalingState);
-        return;
-      }
       await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
       socket.emit("signal", { to: from, data: { type: "answer", answer } });
     } else if (data.type === "answer") {
-      // only set answer if not already stable
-      if (peerConnection.signalingState === "stable") {
-        console.warn("Received answer but signaling state is stable; ignoring.");
-        return;
-      }
       await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-    } else if (data.type === "candidate") {
-      if (peerConnection) {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-          console.warn("addIceCandidate failed:", e);
-        }
-      }
+    } else if (data.type === "candidate" && data.candidate) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
     }
-  } catch (e) {
-    console.error("Signal handling error:", e);
+  } catch (err) {
+    console.error("Signaling error:", err);
   }
 });
-
 socket.on("partner-left", () => {
-  showNotification("❌ Partner disconnected.", "danger");
-  if (peerConnection) {
-    try { peerConnection.close(); } catch (e) {}
-    peerConnection = null;
-  }
-  const remoteVideo = document.querySelector(".video-box:last-child video");
-  if (remoteVideo) remoteVideo.remove();
-  // optionally auto-find next partner
-  setTimeout(() => socket.emit("find-partner"), 1500);
+  showNotification("Partner disconnected.", "warning");
+  if (peerConnection) peerConnection.close();
 });
 
-// UI -> send chat message to partner via server (emit)
-function sendChatMessage(msg) {
-  if (!msg) return;
-  addMessage('You', msg, true);
-  socket.emit("chatMessage", msg);
+/* ---------- MAIN START FUNCTION ---------- */
+async function startVideoChat() {
+  try {
+    await initCamera();
+    socket.emit("find-partner");
+  } catch (e) {
+    console.error("startVideoChat failed:", e);
+  }
 }
 
-// expose for existing HTML (if you use buttons)
-window.startChat = () => {
-  startChat(); // show UI
-  socket.emit("find-partner");
-};
-window.endChat = () => {
-  if (peerConnection) try { peerConnection.close(); } catch(e){};
+/* ---------- CHAT ---------- */
+function handleChatInput(event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    const input = event.target;
+    const msg = input.value.trim();
+    if (msg) {
+      addMessage("You", msg, true);
+      socket.emit("chatMessage", msg);
+      input.value = "";
+    }
+  }
+}
+
+function addMessage(sender, text, isOwn) {
+  const chatMessages = document.getElementById("chatMessages");
+  const div = document.createElement("div");
+  div.className = `message ${isOwn ? "own" : "other"}`;
+  div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/* ---------- EXIT ---------- */
+function endChat() {
+  if (peerConnection) peerConnection.close();
   socket.emit("end-chat", { partnerId });
   document.getElementById("landing").style.display = "flex";
   document.getElementById("chatInterface").style.display = "none";
+  showNotification("Chat ended.", "info");
+}
+
+/* ---------- CLOSE MODALS ---------- */
+window.onclick = (event) => {
+  const modals = document.querySelectorAll(".modal");
+  modals.forEach(m => { if (event.target === m) m.classList.remove("active"); });
 };
 </script>
 
