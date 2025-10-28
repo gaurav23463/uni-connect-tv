@@ -814,40 +814,42 @@
             });
         }
     </script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-const socket = io("https://uni-connect-tv-5.onrender.com"); // your backend URL
+const socket = io("https://uni-connect-tv-5.onrender.com"); // your backend
 let localStream, peerConnection, partnerId;
 
-// ⚙️ STUN + TURN servers for stable connectivity (even on mobile data)
 const servers = {
   iceServers: [
-    { urls: ["stun:stun.l.google.com:19302"] },
+    { urls: "stun:stun.l.google.com:19302" },
     {
-      urls: "turn:relay1.expressturn.com:3478",
-      username: "efree",
-      credential: "turnpassword",
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turns:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
     },
   ],
 };
 
-// 🎥 Initialize camera with adaptive quality
+// 🎥 Initialize camera with fallback and stable audio
 async function initCamera() {
   try {
-    const constraints = {
+    localStream = await navigator.mediaDevices.getUserMedia({
       video: {
         width: { ideal: 1280 },
         height: { ideal: 720 },
-        frameRate: { ideal: 30, max: 60 },
+        frameRate: { ideal: 30 },
       },
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       },
-    };
-
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    });
 
     const videoBox = document.querySelector(".video-box:first-child");
     videoBox.innerHTML = "";
@@ -858,19 +860,16 @@ async function initCamera() {
     videoEl.playsInline = true;
     videoBox.appendChild(videoEl);
   } catch (err) {
-    console.error("Camera error:", err);
-    showNotification("⚠️ Camera or mic access denied.", "danger");
+    console.error("Camera/Mic error:", err);
+    showNotification("⚠️ Please allow camera and microphone.", "danger");
   }
 }
 
-// 🤝 Create peer connection with smart bitrate + reconnection
 async function createPeerConnection() {
   peerConnection = new RTCPeerConnection(servers);
 
-  // Add local stream tracks
   localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-  // Handle remote stream
   peerConnection.ontrack = (event) => {
     const [stream] = event.streams;
     const partnerBox = document.querySelector(".video-box:last-child");
@@ -882,7 +881,6 @@ async function createPeerConnection() {
     partnerBox.appendChild(videoEl);
   };
 
-  // ICE exchange
   peerConnection.onicecandidate = (event) => {
     if (event.candidate && partnerId) {
       socket.emit("signal", {
@@ -892,65 +890,18 @@ async function createPeerConnection() {
     }
   };
 
-  // Adaptive bitrate for smoother video
-  peerConnection.onconnectionstatechange = async () => {
-    if (peerConnection.connectionState === "connected") {
-      const senders = peerConnection.getSenders();
-      senders.forEach(sender => {
-        if (sender.track && sender.track.kind === "video") {
-          const params = sender.getParameters();
-          if (!params.encodings) params.encodings = [{}];
-          params.encodings[0].maxBitrate = 1200 * 1000; // ~1.2 Mbps default
-          sender.setParameters(params).catch(console.warn);
-        }
-      });
-    }
-  };
-
-  // Auto reconnect if ICE fails
   peerConnection.oniceconnectionstatechange = () => {
     if (peerConnection.iceConnectionState === "failed") {
-      showNotification("⚠️ Connection unstable — retrying...", "warning");
+      showNotification("⚠️ Weak connection. Reconnecting...", "warning");
       peerConnection.restartIce();
     }
   };
 }
 
-// 🔄 Monitor and adapt quality if internet is weak
-async function monitorConnection() {
-  if (!peerConnection) return;
-  try {
-    const stats = await peerConnection.getStats();
-    stats.forEach(report => {
-      if (report.type === "outbound-rtp" && report.kind === "video") {
-        if (report.bytesSent < 200000) {
-          console.warn("Low bandwidth detected. Reducing video quality...");
-          const senders = peerConnection.getSenders();
-          senders.forEach(sender => {
-            if (sender.track && sender.track.kind === "video") {
-              const params = sender.getParameters();
-              if (!params.encodings) params.encodings = [{}];
-              params.encodings[0].scaleResolutionDownBy = 2; // drop to ~360p
-              sender.setParameters(params).catch(console.warn);
-            }
-          });
-        }
-      }
-    });
-  } catch (err) {
-    console.error("Stats error:", err);
-  }
-}
-
-// Run quality monitor every 10s
-setInterval(monitorConnection, 10000);
-
-// 🌍 SOCKET EVENTS — Matchmaking + Signaling
 function startChat() {
   document.getElementById("landing").style.display = "none";
   document.getElementById("chatInterface").style.display = "flex";
   initCamera();
-
   socket.emit("find-partner");
   showNotification("🔍 Searching for a partner...", "info");
 }
@@ -962,7 +913,10 @@ socket.on("waiting", () => {
 socket.on("partner-found", async (id) => {
   partnerId = id;
   showNotification("🎉 Partner found! Connecting video...", "success");
+
+  if (!localStream) await initCamera();
   await createPeerConnection();
+
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
   socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
@@ -987,11 +941,10 @@ socket.on("partner-left", () => {
   showNotification("❌ Partner disconnected.", "danger");
   if (peerConnection) peerConnection.close();
   peerConnection = null;
-  const remoteVideo = document.querySelector(".video-box:last-child video");
-  if (remoteVideo) remoteVideo.remove();
+  const partnerBox = document.querySelector(".video-box:last-child");
+  partnerBox.innerHTML = "<div class='video-placeholder'>Partner left.</div>";
 });
 
-// 🧭 Next / End Chat
 function nextPartner() {
   if (peerConnection) peerConnection.close();
   document.querySelector(".video-box:last-child").innerHTML =
