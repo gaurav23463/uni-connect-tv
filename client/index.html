@@ -294,7 +294,7 @@
     </script>
 
     <!-- ---------- SCRIPT: Socket.IO + WebRTC (clean, fixed) ---------- -->
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 const API_BASE =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -303,10 +303,12 @@ const API_BASE =
 
 const socket = io(API_BASE);
 let localStream, peerConnection, partnerId;
+
 const servers = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" }
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" }
   ]
 };
 
@@ -333,7 +335,7 @@ function hideModal(type) {
   if (modal) modal.classList.remove("active");
 }
 
-// ✅ AUTH HANDLER
+// ✅ AUTH
 async function handleAuth(event) {
   event.preventDefault();
   const email = document.getElementById("email").value;
@@ -352,7 +354,6 @@ async function handleAuth(event) {
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("email", data.email);
-
     hideModal("auth");
     startChat();
     showNotification(`Welcome ${data.email}`, "success");
@@ -376,7 +377,10 @@ function startChat() {
 // 🎥 CAMERA
 async function initCamera() {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: true
+    });
     const videoBox = document.querySelector(".video-box:first-child");
     videoBox.innerHTML = "";
     const videoEl = document.createElement("video");
@@ -409,14 +413,16 @@ async function createPeerConnection() {
 
   peerConnection.onicecandidate = (event) => {
     if (event.candidate && partnerId) {
-      socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
+      socket.emit("signal", {
+        to: partnerId,
+        data: { type: "candidate", candidate: event.candidate },
+      });
     }
   };
 
   peerConnection.onconnectionstatechange = () => {
-    console.log("Connection:", peerConnection.connectionState);
-    if (peerConnection.connectionState === "failed" || peerConnection.connectionState === "disconnected") {
-      showNotification("⚠️ Partner disconnected. Reconnecting...", "warning");
+    if (peerConnection.connectionState === "disconnected") {
+      showNotification("⚠️ Partner disconnected.", "warning");
       socket.emit("find-partner");
     }
   };
@@ -424,10 +430,7 @@ async function createPeerConnection() {
 
 // 🔄 SOCKET EVENTS
 socket.on("connect", () => console.log("socket connected", socket.id));
-
-socket.on("waiting", () => {
-  showNotification("⏳ Waiting for another user...", "info");
-});
+socket.on("waiting", () => showNotification("⏳ Waiting for another user...", "info"));
 
 socket.on("partner-found", async (id) => {
   partnerId = id;
@@ -467,15 +470,15 @@ function handleChatInput(event) {
     const input = event.target;
     const message = input.value.trim();
     if (!message) return;
-
     addMessage("You", message, true);
-    socket.emit("chatMessage", message);
+    socket.emit("chatMessage", { text: message });
     input.value = "";
   }
 }
 
 socket.on("chatMessage", (msg) => {
-  addMessage("Partner", msg, false);
+  const text = typeof msg === "object" ? msg.text || JSON.stringify(msg) : msg;
+  addMessage("Partner", text, false);
 });
 
 function addMessage(sender, text, isOwn) {
@@ -498,13 +501,11 @@ function nextPartner() {
 function endChat() {
   if (peerConnection) peerConnection.close();
   socket.emit("end-chat", { partnerId });
-
   document.getElementById("chatInterface").style.display = "none";
   const landing = document.getElementById("landing");
   landing.style.display = "flex";
   landing.style.justifyContent = "center";
   landing.style.alignItems = "center";
-  landing.style.flexDirection = "column";
   showNotification("Chat ended.", "info");
 }
 
@@ -512,7 +513,10 @@ function reportUser() {
   fetch(`${API_BASE}/api/report`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userEmail: localStorage.getItem("email"), reason: "Inappropriate behavior" }),
+    body: JSON.stringify({
+      userEmail: localStorage.getItem("email"),
+      reason: "Inappropriate behavior",
+    }),
   });
   showNotification("User reported.", "warning");
 }
@@ -523,12 +527,17 @@ function startDemo() {
   showNotification("Demo mode activated!", "info");
 }
 
-// 🪄 NOTIFICATIONS
+// 🪄 NOTIFICATIONS (Non-overlapping)
 function showNotification(message, type = "info") {
+  const existing = document.querySelectorAll(".notification");
+  existing.forEach(n => n.remove());
+
   const notification = document.createElement("div");
+  notification.classList.add("notification");
   notification.style.cssText = `
     position: fixed;
-    top: 20px; right: 20px;
+    top: 20px;
+    right: 20px;
     background: var(--card-bg);
     color: var(--text-primary);
     padding: 1rem 1.5rem;
@@ -548,9 +557,9 @@ function showNotification(message, type = "info") {
   setTimeout(() => {
     notification.style.animation = "slideOut 0.3s ease-in forwards";
     setTimeout(() => notification.remove(), 300);
-  }, 3000);
+  }, 2500);
 }
+</body>
 </script>
 
-</body>
 </html>
