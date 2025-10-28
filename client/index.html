@@ -814,119 +814,202 @@
             });
         }
     </script>
-    
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script>
-        const socket = io("https://uni-connect-tv-5.onrender.com"); // change if backend is on another domain
-        let localStream, peerConnection, partnerId;
-        const servers = { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] };
+<script>
+const socket = io("https://uni-connect-tv-5.onrender.com"); // your backend URL
+let localStream, peerConnection, partnerId;
 
-        // Start chat and connect via WebRTC
-        function startChat() {
-            document.getElementById('landing').style.display = 'none';
-            document.getElementById('chatInterface').style.display = 'flex';
-            initCamera();
+// ⚙️ STUN + TURN servers for stable connectivity (even on mobile data)
+const servers = {
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302"] },
+    {
+      urls: "turn:relay1.expressturn.com:3478",
+      username: "efree",
+      credential: "turnpassword",
+    },
+  ],
+};
 
-            socket.emit("find-partner");
-            showNotification("🔍 Searching for a partner...", "info");
+// 🎥 Initialize camera with adaptive quality
+async function initCamera() {
+  try {
+    const constraints = {
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 60 },
+      },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    };
+
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    const videoBox = document.querySelector(".video-box:first-child");
+    videoBox.innerHTML = "";
+    const videoEl = document.createElement("video");
+    videoEl.srcObject = localStream;
+    videoEl.autoplay = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoBox.appendChild(videoEl);
+  } catch (err) {
+    console.error("Camera error:", err);
+    showNotification("⚠️ Camera or mic access denied.", "danger");
+  }
+}
+
+// 🤝 Create peer connection with smart bitrate + reconnection
+async function createPeerConnection() {
+  peerConnection = new RTCPeerConnection(servers);
+
+  // Add local stream tracks
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+  // Handle remote stream
+  peerConnection.ontrack = (event) => {
+    const [stream] = event.streams;
+    const partnerBox = document.querySelector(".video-box:last-child");
+    partnerBox.innerHTML = "";
+    const videoEl = document.createElement("video");
+    videoEl.srcObject = stream;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    partnerBox.appendChild(videoEl);
+  };
+
+  // ICE exchange
+  peerConnection.onicecandidate = (event) => {
+    if (event.candidate && partnerId) {
+      socket.emit("signal", {
+        to: partnerId,
+        data: { type: "candidate", candidate: event.candidate },
+      });
+    }
+  };
+
+  // Adaptive bitrate for smoother video
+  peerConnection.onconnectionstatechange = async () => {
+    if (peerConnection.connectionState === "connected") {
+      const senders = peerConnection.getSenders();
+      senders.forEach(sender => {
+        if (sender.track && sender.track.kind === "video") {
+          const params = sender.getParameters();
+          if (!params.encodings) params.encodings = [{}];
+          params.encodings[0].maxBitrate = 1200 * 1000; // ~1.2 Mbps default
+          sender.setParameters(params).catch(console.warn);
         }
+      });
+    }
+  };
 
-        socket.on("waiting", () => {
-            showNotification("⏳ Waiting for another user to connect...", "info");
-        });
+  // Auto reconnect if ICE fails
+  peerConnection.oniceconnectionstatechange = () => {
+    if (peerConnection.iceConnectionState === "failed") {
+      showNotification("⚠️ Connection unstable — retrying...", "warning");
+      peerConnection.restartIce();
+    }
+  };
+}
 
-        socket.on("partner-found", async (id) => {
-            partnerId = id;
-            showNotification("🎉 Partner found! Connecting video...", "success");
-            await createPeerConnection();
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
-        });
-
-        socket.on("signal", async ({ from, data }) => {
-            partnerId = from;
-            if (data.type === "offer") {
-                await createPeerConnection();
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                socket.emit("signal", { to: from, data: { type: "answer", answer } });
-            } else if (data.type === "answer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } else if (data.type === "candidate" && peerConnection) {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+// 🔄 Monitor and adapt quality if internet is weak
+async function monitorConnection() {
+  if (!peerConnection) return;
+  try {
+    const stats = await peerConnection.getStats();
+    stats.forEach(report => {
+      if (report.type === "outbound-rtp" && report.kind === "video") {
+        if (report.bytesSent < 200000) {
+          console.warn("Low bandwidth detected. Reducing video quality...");
+          const senders = peerConnection.getSenders();
+          senders.forEach(sender => {
+            if (sender.track && sender.track.kind === "video") {
+              const params = sender.getParameters();
+              if (!params.encodings) params.encodings = [{}];
+              params.encodings[0].scaleResolutionDownBy = 2; // drop to ~360p
+              sender.setParameters(params).catch(console.warn);
             }
-        });
-
-        socket.on("partner-left", () => {
-            showNotification("❌ Partner disconnected.", "danger");
-            if (peerConnection) peerConnection.close();
-            peerConnection = null;
-            const remoteVideo = document.querySelector(".video-box:last-child video");
-            if (remoteVideo) remoteVideo.remove();
-        });
-
-        // CAMERA + CONNECTION
-        async function initCamera() {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                const videoBox = document.querySelector(".video-box:first-child");
-                const videoEl = document.createElement("video");
-                videoEl.srcObject = localStream;
-                videoEl.autoplay = true;
-                videoEl.muted = true;
-                videoEl.playsInline = true;
-                videoBox.innerHTML = "";
-                videoBox.appendChild(videoEl);
-            } catch (err) {
-                console.error("Camera error:", err);
-                showNotification("⚠️ Camera access denied.", "danger");
-            }
+          });
         }
+      }
+    });
+  } catch (err) {
+    console.error("Stats error:", err);
+  }
+}
 
-        async function createPeerConnection() {
-            peerConnection = new RTCPeerConnection(servers);
+// Run quality monitor every 10s
+setInterval(monitorConnection, 10000);
 
-            // Local stream to peer
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+// 🌍 SOCKET EVENTS — Matchmaking + Signaling
+function startChat() {
+  document.getElementById("landing").style.display = "none";
+  document.getElementById("chatInterface").style.display = "flex";
+  initCamera();
 
-            // Remote stream
-            peerConnection.ontrack = (event) => {
-                const [stream] = event.streams;
-                const partnerBox = document.querySelector(".video-box:last-child");
-                partnerBox.innerHTML = "";
-                const videoEl = document.createElement("video");
-                videoEl.srcObject = stream;
-                videoEl.autoplay = true;
-                videoEl.playsInline = true;
-                partnerBox.appendChild(videoEl);
-            };
+  socket.emit("find-partner");
+  showNotification("🔍 Searching for a partner...", "info");
+}
 
-            // ICE candidates
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && partnerId) {
-                    socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: event.candidate } });
-                }
-            };
-        }
+socket.on("waiting", () => {
+  showNotification("⏳ Waiting for another user...", "info");
+});
 
-        // NEXT PARTNER
-        function nextPartner() {
-            if (peerConnection) peerConnection.close();
-            document.querySelector(".video-box:last-child").innerHTML = "<div class='video-placeholder'>⏳ Finding Partner...</div>";
-            socket.emit("find-partner");
-        }
+socket.on("partner-found", async (id) => {
+  partnerId = id;
+  showNotification("🎉 Partner found! Connecting video...", "success");
+  await createPeerConnection();
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
+});
 
-        // END CHAT
-        function endChat() {
-            if (peerConnection) peerConnection.close();
-            socket.emit("end-chat", { partnerId });
-            document.getElementById("landing").style.display = "flex";
-            document.getElementById("chatInterface").style.display = "none";
-            showNotification("Chat ended.", "info");
-        }
-    </script>
+socket.on("signal", async ({ from, data }) => {
+  partnerId = from;
+  if (data.type === "offer") {
+    await createPeerConnection();
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit("signal", { to: from, data: { type: "answer", answer } });
+  } else if (data.type === "answer") {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+  } else if (data.type === "candidate" && peerConnection) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+});
+
+socket.on("partner-left", () => {
+  showNotification("❌ Partner disconnected.", "danger");
+  if (peerConnection) peerConnection.close();
+  peerConnection = null;
+  const remoteVideo = document.querySelector(".video-box:last-child video");
+  if (remoteVideo) remoteVideo.remove();
+});
+
+// 🧭 Next / End Chat
+function nextPartner() {
+  if (peerConnection) peerConnection.close();
+  document.querySelector(".video-box:last-child").innerHTML =
+    "<div class='video-placeholder'>⏳ Finding Partner...</div>";
+  socket.emit("find-partner");
+}
+
+function endChat() {
+  if (peerConnection) peerConnection.close();
+  socket.emit("end-chat", { partnerId });
+  document.getElementById("landing").style.display = "flex";
+  document.getElementById("chatInterface").style.display = "none";
+  showNotification("Chat ended.", "info");
+}
+</script>
+
+   
+        
 </body>
 
 </html>
