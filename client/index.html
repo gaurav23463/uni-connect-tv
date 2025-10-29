@@ -397,9 +397,25 @@ async function initCamera() {
 
 // ⚙️ PEER CONNECTION
 async function createPeerConnection() {
-  peerConnection = new RTCPeerConnection(servers);
+  const config = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      {
+        urls: "turn:relay1.expressturn.com:3478",
+        username: "efreeuser",
+        credential: "password123"
+      }
+    ],
+    iceCandidatePoolSize: 10
+  };
+
+  peerConnection = new RTCPeerConnection(config);
+
+  // Add all local media tracks
   localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
+  // Handle remote stream
   peerConnection.ontrack = (event) => {
     const [remoteStream] = event.streams;
     const partnerBox = document.querySelector(".video-box:last-child");
@@ -411,22 +427,24 @@ async function createPeerConnection() {
     partnerBox.appendChild(videoEl);
   };
 
+  // Retry ICE candidates on failure
+  peerConnection.onicecandidateerror = (e) => {
+    console.warn("ICE Candidate error:", e);
+    showNotification("⚠️ Connection issue — retrying...", "warning");
+    setTimeout(() => socket.emit("find-partner"), 2000);
+  };
+
+  // Handle new ICE candidates
   peerConnection.onicecandidate = (event) => {
     if (event.candidate && partnerId) {
       socket.emit("signal", {
         to: partnerId,
-        data: { type: "candidate", candidate: event.candidate },
+        data: { type: "candidate", candidate: event.candidate }
       });
     }
   };
-
-  peerConnection.onconnectionstatechange = () => {
-    if (peerConnection.connectionState === "disconnected") {
-      showNotification("⚠️ Partner disconnected.", "warning");
-      socket.emit("find-partner");
-    }
-  };
 }
+
 
 // 🔄 SOCKET EVENTS
 socket.on("connect", () => console.log("socket connected", socket.id));
@@ -512,11 +530,32 @@ function addMessage(sender, text, isOwn) {
 
 // 🧭 NEXT / END / REPORT
 function nextPartner() {
-  if (peerConnection) peerConnection.close();
-  socket.emit("find-partner");
+  // Close existing connection if any
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+
+  // Clear partner video
   const partnerBox = document.querySelector(".video-box:last-child");
   partnerBox.innerHTML = "<div class='video-placeholder'>⏳ Finding Partner...</div>";
+
+  // Clear chat messages
+  document.getElementById("chatMessages").innerHTML = "";
+
+  // Reset partner info
+  partnerId = null;
+
+  // Retry logic
+  showNotification("🔄 Searching for a new partner...", "info");
+  socket.emit("find-partner");
+
+  // Reinitialize camera if not active
+  if (!localStream) {
+    initCamera();
+  }
 }
+
 
 function endChat() {
   if (peerConnection) peerConnection.close();
