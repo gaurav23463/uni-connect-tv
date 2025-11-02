@@ -1,186 +1,274 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>UniConnect TV — Demo</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>UniConnect TV — Connect Students</title>
 
-  <!-- Fonts (system stack for performance) -->
+  <!-- Minimal system font for speed -->
   <style>
     :root{
-      --bg:#0b0d12;
-      --card-bg: rgba(255,255,255,0.03);
-      --glass-border: rgba(255,255,255,0.06);
-      --neon-1:#5b8cff;
-      --neon-2:#9b5bff;
+      --bg-dark:#05060a;
+      --panel:#0e1116;
+      --glass: rgba(255,255,255,0.03);
+      --glass-2: rgba(255,255,255,0.02);
+      --neon-1:#6b8cff;
+      --neon-2:#b86bff;
       --accent:#8be4ff;
       --text:#e6eef8;
-      --muted:#98a0b3;
+      --muted:#95a0b8;
       --success:#4ade80;
       --danger:#ff6b6b;
       --radius:16px;
+      --ease: cubic-bezier(.2,.9,.3,1);
     }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,#05060a 0%, #0b0d12 100%);font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;color:var(--text);-webkit-font-smoothing:antialiased}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg-dark),#07080b);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial}
     a{color:inherit}
     button{font-family:inherit}
-    /* container */
-    .wrap{max-width:1200px;margin:28px auto;padding:18px}
-    header{display:flex;align-items:center;justify-content:space-between;padding:12px 0}
-    .brand{display:flex;gap:12px;align-items:center}
-    .logo {
-      width:56px;height:56px;border-radius:12px;
-      background:linear-gradient(135deg,var(--neon-1),var(--neon-2));
-      display:grid;place-items:center;font-weight:800;color:white;box-shadow:0 12px 40px rgba(91,140,255,0.18);
-      transform:translateZ(24px);
+    /* Container */
+    .app { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden; }
+
+    /* Particle background */
+    .particles {
+      position:absolute; inset:0; z-index:0; pointer-events:none; opacity:0.9;
+      background:
+        radial-gradient(800px 300px at 10% 20%, rgba(107,140,255,0.06), transparent 10%),
+        radial-gradient(400px 140px at 85% 80%, rgba(184,107,255,0.05), transparent 8%),
+        radial-gradient(1200px 400px at 50% 10%, rgba(139,228,255,0.02), transparent 12%);
+      filter: blur(18px);
     }
-    .title{font-size:18px;font-weight:700;letter-spacing:0.2px}
-    .subtitle{font-size:12px;color:var(--muted)}
 
-    /* controls */
-    .controls{display:flex;gap:10px;align-items:center}
-    .btn { padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.04); background:var(--card-bg); color:var(--text); cursor:pointer; font-weight:700; }
-    .btn.primary{ background: linear-gradient(90deg,var(--neon-1),var(--neon-2)); color:#fff; box-shadow:0 12px 30px rgba(123,98,255,0.14);}
-    .theme-toggle{font-size:14px}
+    /* Stage wrapper */
+    .stage-wrap { width:100%; max-width:1200px; z-index:5; display:flex; gap:28px; align-items:flex-start; justify-content:center; }
 
-    /* board */
-    .stage{display:grid;grid-template-columns: 1fr 360px; gap:22px; margin-top:22px; align-items:start; perspective:1300px}
-    @media (max-width:1000px){ .stage{grid-template-columns:1fr; padding:0 14px} .right-col{order:2} }
+    /* LOGIN card (center) */
+    .login-view { width:880px; max-width:calc(100vw - 48px); display:grid; grid-template-columns: 1fr 380px; gap:22px; align-items:stretch; transform-style:preserve-3d; transition: transform 900ms var(--ease), opacity 700ms var(--ease); }
+    @media (max-width:960px){ .login-view { grid-template-columns: 1fr; } .left-panel { order:2 } }
 
-    /* video area (3D glass) */
-    .video-area{display:grid;grid-template-columns:1fr 1fr; gap:20px; transform-style:preserve-3d}
-    @media (max-width:900px){ .video-area{grid-template-columns:1fr} }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));
+      border-radius:20px; padding:18px; border:1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 30px 90px rgba(6,8,20,0.7);
+      position:relative; overflow:hidden; transform-style:preserve-3d;
+    }
 
-    .video-card{
-      min-height:360px;border-radius:var(--radius);position:relative;overflow:hidden;
-      background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
-      border:1px solid var(--glass-border);
-      box-shadow: 0 24px 60px rgba(3,6,18,0.65);
-      display:flex;align-items:center;justify-content:center; transition: transform .45s cubic-bezier(.2,.9,.3,1), box-shadow .45s;
+    .brand { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+    .logo { width:64px;height:64px;border-radius:14px;display:grid;place-items:center;font-weight:800;color:white;
+      background: linear-gradient(135deg,var(--neon-1),var(--neon-2)); box-shadow: 0 14px 50px rgba(107,140,255,0.14); transform: translateZ(40px);
+    }
+    .hero { padding:22px; display:flex; flex-direction:column; gap:10px; justify-content:center }
+    .hero h1 { margin:0; font-size:28px; letter-spacing:-0.4px }
+    .hero p { margin:0; color:var(--muted); font-size:14px }
+
+    .cta-row { display:flex; gap:10px; margin-top:12px; }
+    .btn { padding:10px 14px; border-radius:12px; background:var(--glass); border:1px solid rgba(255,255,255,0.04); color:var(--text); cursor:pointer; font-weight:700; }
+    .btn.primary { background: linear-gradient(90deg,var(--neon-1),var(--neon-2)); color:white; box-shadow: 0 12px 30px rgba(123,98,255,0.18); }
+
+    /* Feature list */
+    .features { padding:14px 0; display:flex; flex-direction:column; gap:10px; }
+    .feature { display:flex; gap:10px; align-items:flex-start; color:var(--muted); font-size:14px }
+
+    /* Right auth box */
+    .auth-box { display:flex; flex-direction:column; gap:10px; align-items:stretch; }
+    .auth-box input { padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text) }
+    .auth-small { font-size:13px; color:var(--muted) }
+
+    /* MAIN app hidden by default then fade in */
+    .app-view { display:none; width:100%; max-width:1200px; transform-style:preserve-3d; }
+
+    /* MAIN UI: header + stage */
+    header.app-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; transform: translateZ(60px); }
+    .brand-compact { display:flex; gap:10px; align-items:center; }
+
+    /* stage */
+    .stage { display:grid; grid-template-columns: 1fr 360px; gap:22px; align-items:start; }
+    @media (max-width:1000px){ .stage { grid-template-columns:1fr; } .right-col{ order:2 } }
+
+    /* video area */
+    .video-area { display:grid; grid-template-columns:1fr 1fr; gap:18px; transform-style:preserve-3d; }
+    @media (max-width:900px){ .video-area { grid-template-columns:1fr } }
+
+    .video-card {
+      min-height:360px; border-radius:18px; position:relative; overflow:hidden;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.035);
+      box-shadow: 0 32px 100px rgba(3,6,18,0.6);
+      display:flex; align-items:center; justify-content:center; transition: transform .45s var(--ease), box-shadow .45s;
       transform-style:preserve-3d;
     }
-    .video-card .bg-layer{ position:absolute; inset:0; pointer-events:none; background:
-      radial-gradient(600px 200px at 10% 10%, rgba(91,140,255,0.06), transparent 8%),
-      radial-gradient(400px 160px at 85% 85%, rgba(155,91,255,0.05), transparent 10%); filter:blur(28px); transform: translateZ(-40px) scale(1.06);}
-    .video-label{position:absolute;left:14px;top:14px;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,0.36);font-weight:700;backdrop-filter:blur(6px)}
-    .status-indicator{position:absolute;right:12px;top:14px;width:12px;height:12px;border-radius:50%;box-shadow: 0 8px 20px rgba(0,0,0,0.4)}
-    .status-indicator.offline{background:rgba(255,255,255,0.06)}
-    .status-indicator.online{background:linear-gradient(90deg,var(--neon-1),var(--neon-2))}
+    .video-card .bg-layer { position:absolute; inset:0; pointer-events:none;
+      background:
+        radial-gradient(600px 200px at 10% 10%, rgba(107,140,255,0.06), transparent 8%),
+        radial-gradient(400px 160px at 85% 85%, rgba(184,107,255,0.05), transparent 10%);
+      filter: blur(28px); transform: translateZ(-40px) scale(1.06); }
+    .video-label { position:absolute; left:14px; top:14px; padding:8px 10px; border-radius:12px; background: rgba(0,0,0,0.36); font-weight:700; backdrop-filter: blur(6px) }
+    .status-indicator { position:absolute; right:12px; top:14px; width:12px; height:12px; border-radius:50%; box-shadow: 0 8px 20px rgba(0,0,0,0.4) }
+    .status-indicator.offline { background: rgba(255,255,255,0.06) }
+    .status-indicator.online { background: linear-gradient(90deg,var(--neon-1),var(--neon-2)) }
 
-    .video-placeholder{color:var(--muted);font-weight:600}
+    .video-placeholder { color:var(--muted); font-weight:700 }
+    .video-card video { width:100%; height:100%; object-fit:cover; border-radius:calc(18px - 6px); transform: translateZ(40px) }
 
-    .video-card video{ width:100%; height:100%; object-fit:cover; border-radius:calc(var(--radius) - 6px); transform:translateZ(40px); }
+    .video-card:hover { transform: translateY(-10px) rotateX(3deg) translateZ(28px); box-shadow: 0 40px 120px rgba(8,10,30,0.72); }
 
-    .video-card:hover{ transform: translateY(-8px) rotateX(4deg) translateZ(28px); box-shadow:0 40px 100px rgba(8,10,30,0.7);}
+    /* right column */
+    .right-col { display:flex; flex-direction:column; gap:14px }
+    .panel { background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent); padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.03) }
+    .panel h3 { margin:0 0 10px 0; font-size:14px }
+    #chatMessages { height:360px; overflow:auto; padding:8px; display:flex; flex-direction:column; gap:8px; background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent); border-radius:10px }
+    .message { padding:8px 12px; border-radius:10px; max-width:82%; font-size:14px; line-height:1.25 }
+    .message.own { align-self:flex-end; background: linear-gradient(90deg,#0f1724,#0b1220); color:var(--text); border:1px solid rgba(255,255,255,0.02) }
+    .message.other { align-self:flex-start; background: rgba(255,255,255,0.03); color:var(--text) }
+    .chat-input { display:flex; gap:10px; margin-top:10px }
+    .chat-input textarea { flex:1; resize:none; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text) }
 
-    /* right column (controls + chat) */
-    .right-col{display:flex;flex-direction:column;gap:18px}
-    .panel{background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:14px;border-radius:14px;border:1px solid var(--glass-border); box-shadow: 0 12px 36px rgba(2,4,12,0.6)}
-    .panel h3{margin:0 0 10px 0;font-size:14px}
-    #chatMessages{height:380px; overflow:auto; padding:8px; display:flex; flex-direction:column; gap:8px; background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent); border-radius:10px}
-    .message{ padding:8px 10px; border-radius:10px; max-width:85%; font-size:14px; line-height:1.25 }
-    .message.own{ align-self:flex-end; background: linear-gradient(90deg,#0f1724,#0b1220); color:var(--text); border:1px solid rgba(255,255,255,0.02) }
-    .message.other{ align-self:flex-start; background: rgba(255,255,255,0.03); color:var(--text) }
-    .chat-input{display:flex; gap:10px; margin-top:10px}
-    .chat-input textarea{flex:1; resize:none; padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text)}
-    .small{font-size:13px;color:var(--muted)}
+    /* notification */
+    .notification { position:fixed; top:20px; right:20px; padding:12px 16px; border-radius:10px; background:rgba(6,8,18,0.95); color:var(--text); box-shadow:0 12px 40px rgba(6,8,18,0.6); z-index:9999; border-left:4px solid var(--neon-1) }
 
-    /* footer */
-    footer{margin-top:22px;color:var(--muted);font-size:13px;text-align:center}
+    footer { text-align:center; margin-top:18px; color:var(--muted); font-size:13px }
 
-    /* notifications */
-    .notification{position:fixed;top:22px;right:22px;padding:12px 16px;border-radius:10px;background:rgba(12,14,22,0.95);color:var(--text);box-shadow:0 12px 40px rgba(6,8,18,0.6);z-index:9999;border-left:4px solid var(--neon-1)}
-
-    @media (max-width:600px){
-      .video-card{min-height:220px}
-      .stage{grid-template-columns:1fr}
-      .wrap{padding:12px}
+    @media (max-width:640px){
+      .video-card { min-height:220px }
+      .login-view { grid-template-columns:1fr; gap:12px }
+      .cta-row { flex-direction:column }
+      .stage { grid-template-columns:1fr }
     }
 
-    /* reduced motion fallback */
     @media (prefers-reduced-motion: reduce){
-      .video-card, .video-card:hover{ transform:none !important; transition:none !important}
+      .video-card, .login-view, .app-view { transition:none !important; transform:none !important }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="brand">
-        <div class="logo">UC</div>
-        <div>
-          <div class="title">UniConnect TV</div>
-          <div class="subtitle">Connecting Students, Building Conversations</div>
+  <div class="app" id="appRoot">
+    <div class="particles"></div>
+
+    <!-- Stage wrapper holds either login view or main app -->
+    <div class="stage-wrap">
+
+      <!-- LOGIN / WELCOME view -->
+      <div class="login-view card" id="loginView" aria-hidden="false">
+        <div class="left-panel">
+          <div class="card hero">
+            <div class="brand">
+              <div class="logo">UC</div>
+              <div>
+                <div style="font-weight:800;font-size:16px">UniConnect TV</div>
+                <div style="color:var(--muted);font-size:13px">Connecting students — instant random chat</div>
+              </div>
+            </div>
+
+            <h1 style="margin-top:8px">Meet students from across campuses — instantly</h1>
+            <p style="margin-top:6px;color:var(--muted)">Verified campus chats, smart matching, premium filters coming soon. Try demo or login to start.</p>
+
+            <div class="cta-row" style="margin-top:14px">
+              <button class="btn primary" onclick="startChatFromLogin()">Start Chat</button>
+              <button class="btn" onclick="startDemo()">Try Demo</button>
+              <button class="btn" onclick="showAbout()">About</button>
+            </div>
+
+            <div class="features" style="margin-top:16px">
+              <div class="feature">⚡ Fast P2P video with TURN fallback</div>
+              <div class="feature">🔒 Optional campus verification</div>
+              <div class="feature">🎭 Real-time filters & AI matchmaking (planned)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="right-panel">
+          <div class="card auth-box">
+            <div style="font-weight:700">Login / Register</div>
+            <input id="email" placeholder="Your email (optional)" />
+            <input id="password" placeholder="Password (optional)" type="password" />
+            <input id="department" placeholder="Department (optional)" />
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+              <button class="btn" onclick="hideLogin()">Close</button>
+              <button class="btn primary" onclick="handleAuth(event)">Login</button>
+            </div>
+            <div style="margin-top:8px;font-size:13px;color:var(--muted)">No payment required to start. Premium features coming soon.</div>
+          </div>
         </div>
       </div>
 
-      <div class="controls">
-        <button class="btn" onclick="showModal('auth')">Log in</button>
-        <button class="btn" onclick="startDemo()">Try Demo</button>
-        <button class="btn primary" onclick="startChat()">Start Chat</button>
+      <!-- APP view (hidden initially) -->
+      <div class="app-view" id="appView" aria-hidden="true" style="display:none; width:100%">
+        <header class="app-header">
+          <div class="brand-compact">
+            <div class="logo" style="width:48px;height:48px;border-radius:12px">UC</div>
+            <div>
+              <div style="font-weight:800">UniConnect TV</div>
+              <div style="font-size:12px;color:var(--muted)">Instant campus conversations</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center">
+            <button class="btn" onclick="showModal('auth')">Account</button>
+            <button class="btn" id="muteBtn" onclick="toggleAudio()">Mute</button>
+            <button class="btn" id="camBtn" onclick="toggleCamera()">Camera</button>
+            <button class="btn primary" onclick="nextPartner()">Next</button>
+          </div>
+        </header>
+
+        <main class="stage" id="mainStage">
+          <section class="left-col">
+            <div class="video-area" id="videoStage">
+              <div class="video-card" id="localCard" data-role="local">
+                <div class="bg-layer"></div>
+                <div class="video-label">You</div>
+                <div id="localStatus" class="status-indicator offline"></div>
+                <div class="video-placeholder">📹 Camera loading…</div>
+              </div>
+
+              <div class="video-card" id="remoteCard" data-role="remote">
+                <div class="bg-layer"></div>
+                <div class="video-label">Partner</div>
+                <div id="remoteStatus" class="status-indicator offline"></div>
+                <div class="video-placeholder">⏳ Finding Partner…</div>
+              </div>
+            </div>
+
+            <div style="margin-top:14px;display:flex;gap:10px">
+              <button class="btn" onclick="endChat()">End</button>
+              <button class="btn" onclick="reportUser()">Report</button>
+              <div style="flex:1"></div>
+            </div>
+          </section>
+
+          <aside class="right-col">
+            <div class="panel">
+              <h3>Chat</h3>
+              <div id="chatMessages" aria-live="polite"></div>
+              <div class="chat-input">
+                <textarea id="chatInput" rows="2" placeholder="Type message and press Enter..." onkeydown="handleChatInput(event)"></textarea>
+                <button class="btn primary" onclick="sendChatFromUI()">Send</button>
+              </div>
+              <div style="margin-top:8px;color:var(--muted);font-size:13px">Tip: Use Next to find new partners. Use Report if needed.</div>
+            </div>
+
+            <div class="panel">
+              <h3>Profile</h3>
+              <div class="small" style="color:var(--muted)">Signed in as: <span id="signedEmail">Anonymous</span></div>
+            </div>
+          </aside>
+        </main>
+
+        <footer>© UniConnect TV — built by Gaurav Tripathi</footer>
       </div>
-    </header>
 
-    <main class="stage">
-      <section class="left-col">
-        <div class="video-area" id="videoStage">
-          <div class="video-card" id="localCard" data-role="local">
-            <div class="bg-layer"></div>
-            <div class="video-label">You</div>
-            <div id="localStatus" class="status-indicator offline"></div>
-            <div class="video-placeholder">📹 Camera loading…</div>
-          </div>
+    </div><!-- /stage-wrap -->
+  </div><!-- /app -->
 
-          <div class="video-card" id="remoteCard" data-role="remote">
-            <div class="bg-layer"></div>
-            <div class="video-label">Partner</div>
-            <div id="remoteStatus" class="status-indicator offline"></div>
-            <div class="video-placeholder">⏳ Finding Partner…</div>
-          </div>
+  <!-- small auth modal (reused) -->
+  <div id="authModal" style="display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(2,4,12,0.6)">
+    <div style="width:340px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:18px; border-radius:12px; border:1px solid rgba(255,255,255,0.03)">
+      <h3 style="margin:0 0 12px 0">Account</h3>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="small" id="authEmail">Email: -</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn" onclick="closeAuth()">Close</button>
+          <button class="btn primary" onclick="logout()">Logout</button>
         </div>
-
-        <div style="margin-top:16px; display:flex; gap:12px;">
-          <button class="btn" onclick="nextPartner()">Next</button>
-          <button class="btn" onclick="endChat()">End</button>
-          <button class="btn" onclick="reportUser()">Report</button>
-          <button class="btn" id="muteBtn" onclick="toggleAudio()">Mute</button>
-          <button class="btn" id="camBtn" onclick="toggleCamera()">Camera</button>
-        </div>
-      </section>
-
-      <aside class="right-col">
-        <div class="panel">
-          <h3>Chat</h3>
-          <div id="chatMessages" aria-live="polite"></div>
-
-          <div class="chat-input">
-            <textarea id="chatInput" rows="2" placeholder="Type message and press Enter..." onkeydown="handleChatInput(event)"></textarea>
-            <button class="btn primary" onclick="sendChatFromUI()">Send</button>
-          </div>
-
-          <div style="margin-top:12px" class="small">Tip: Use demo to practice. Use "Next" to find new people.</div>
-        </div>
-
-        <div class="panel">
-          <h3>Profile & Quick Actions</h3>
-          <div class="small">You are anonymous until you verify. Add tags to get better matches (coming soon).</div>
-        </div>
-      </aside>
-    </main>
-
-    <footer>© UniConnect TV — built by Gaurav Tripathi</footer>
-  </div>
-
-  <!-- Auth Modal (simple) -->
-  <div id="authModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(2,4,12,0.6);z-index:9998;align-items:center;justify-content:center">
-    <div style="width:320px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.04)">
-      <h3 style="margin:0 0 12px 0">Login / Register</h3>
-      <input id="email" placeholder="Email" style="width:100%;padding:10px;border-radius:8px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)">
-      <input id="password" type="password" placeholder="Password" style="width:100%;padding:10px;border-radius:8px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)">
-      <input id="department" placeholder="Department (optional)" style="width:100%;padding:10px;border-radius:8px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)">
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="hideModal('auth')">Cancel</button>
-        <button class="btn primary" onclick="handleAuth(event)">Login</button>
       </div>
     </div>
   </div>
@@ -188,15 +276,15 @@
   <!-- Socket.io -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-  <!-- Main App Script -->
+  <!-- Full JS: socket + webrtc + UI logic -->
   <script>
   (function(){
-    // CONFIG
+    // ---------------- CONFIG ----------------
     const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       ? "http://localhost:5000"
-      : "https://uni-connect-tv-5.onrender.com";
+      : "https://uni-connect-tv-5.onrender.com"; // <- Change if your backend differs
 
-    // State
+    // ---------------- STATE ----------------
     let socket = null;
     let peerConnection = null;
     let partnerId = null;
@@ -204,88 +292,82 @@
     let isMuted = false;
     let cameraOff = false;
 
-    // Notification dedupe
+    // notification dedupe simple
     let __lastNotif = { text:'', time:0 };
     function showNotification(text, type='info'){
       const now = Date.now();
       if (text === __lastNotif.text && now - __lastNotif.time < 2500) return;
       __lastNotif = { text, time: now };
       const n = document.createElement('div'); n.className = 'notification'; n.textContent = text;
-      document.body.appendChild(n); setTimeout(()=>n.remove(), 3000);
+      document.body.appendChild(n); setTimeout(()=> n.remove(), 3000);
     }
 
-    // Modal
-    window.showModal = function(type){
-      if(type === 'auth') document.getElementById('authModal').style.display = 'flex';
-    };
-    window.hideModal = function(type){
-      if(type === 'auth') document.getElementById('authModal').style.display = 'none';
-    };
+    // ------------- UI helpers -------------
+    window.showAbout = function(){ showNotification('UniConnect TV — demo features loading soon', 'info'); }
+    function hideLogin(){ document.getElementById('loginView').style.display = 'none'; }
+    function showModal(id){ if (id === 'auth') document.getElementById('authModal').style.display = 'flex'; }
+    function closeAuth(){ document.getElementById('authModal').style.display = 'none'; }
+    function setSignedEmail(email){ document.getElementById('signedEmail').textContent = email || 'Anonymous'; document.getElementById('authEmail').textContent = 'Email: ' + (email || 'Anonymous'); }
 
-    // Init socket safely
+    // escape HTML
+    function escapeHtml(s){ return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    // ------------- SOCKET init (safe) -------------
     async function initApp(){
       if (socket) return;
       socket = io(API_BASE, { transports:['websocket'] });
 
-      // Guard: remove old listeners if reloading
-      if (window.__uni_socket_inited) {
-        socket.removeAllListeners();
-      } else {
-        window.__uni_socket_inited = true;
-      }
+      // guard for hot reloads / repeated inits
+      if (window.__uni_socket_inited) socket.removeAllListeners();
+      else window.__uni_socket_inited = true;
 
       initSocketListeners();
-      console.log('Socket init ->', API_BASE);
+      console.log('Socket initialized ->', API_BASE);
     }
-    window.initApp = initApp;
 
-    // Socket listeners centralized
     function initSocketListeners(){
       socket.removeAllListeners();
 
       socket.on('connect', ()=> console.log('socket connected', socket.id));
       socket.on('waiting', ()=> showNotification('⏳ Waiting for another user...', 'info'));
 
-      socket.on('partner-found', async (id)=>{
+      socket.on('partner-found', async (id) => {
         partnerId = id;
         showNotification('🎉 Partner found — connecting...', 'success');
-        // clear chat
-        document.getElementById('chatMessages').innerHTML = '';
+        // reset chat messages for new conversation
+        const chat = document.getElementById('chatMessages'); if (chat) chat.innerHTML = '';
         await handleOfferAnswerAsNeeded();
       });
 
-      socket.on('signal', async ({ from, data })=>{
+      socket.on('signal', async ({ from, data }) => {
         partnerId = from;
         try {
           if (data.type === 'offer') {
-            // incoming offer
             await handleIncomingOffer(data.offer, from);
           } else if (data.type === 'answer') {
-            // remote answer to our offer
             if (peerConnection && (peerConnection.signalingState === 'have-local-offer' || peerConnection.signalingState === 'stable')) {
               await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
             } else {
-              console.warn('Ignored answer due to wrong signalingState', peerConnection ? peerConnection.signalingState : 'no-pc');
+              console.warn('Ignored answer: wrong signaling state', peerConnection ? peerConnection.signalingState : 'no-pc');
             }
           } else if (data.type === 'candidate') {
             if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
           }
-        } catch(e){ console.error('signal handler err',e) }
+        } catch(e){ console.error('signal handler error', e); }
       });
 
-      socket.on('partner-left', ()=>{
+      socket.on('partner-left', () => {
         showNotification('❌ Partner disconnected', 'warning');
         cleanupPeer();
         resetRemotePlaceholder();
       });
 
-      socket.on('chatMessage', (payload)=>{
+      socket.on('chatMessage', (payload) => {
         const text = normalizeIncoming(payload);
         addMessage('Partner', text, false);
       });
     }
 
-    // Normalize incoming chat payload
     function normalizeIncoming(payload){
       if (!payload) return '';
       if (typeof payload === 'string') {
@@ -296,30 +378,28 @@
       return JSON.stringify(payload);
     }
 
-    // TURN fetch
+    // --------- TURN fetch ----------
     async function getIceServers(){
       try {
         const r = await fetch(`${API_BASE}/api/turn`);
-        if (!r.ok) throw new Error('turn fetch failed');
+        if (!r.ok) throw new Error('TURN fetch failed');
         const j = await r.json();
         return j.iceServers || [{ urls:'stun:stun.l.google.com:19302' }];
       } catch(e){
-        console.warn('TURN fetch failed, fallback STUN', e);
+        console.warn('TURN fetch failed, using STUN', e);
         return [{ urls:'stun:stun.l.google.com:19302' }];
       }
     }
 
-    // create peer connection and start local media
+    // --------- Local media & PC ----------
     async function prepareLocalStreamIfNeeded(){
       if (localStream) return;
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: { width:{ideal:640}, height:{ideal:480} }, audio:true });
-        const localCard = document.getElementById('localCard');
-        localCard.innerHTML = ''; // clear placeholder
-        const v = document.createElement('video');
-        v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = localStream;
-        localCard.appendChild(v);
-        document.getElementById('localStatus').classList.remove('offline'); document.getElementById('localStatus').classList.add('online');
+        const localCard = document.getElementById('localCard'); if (localCard) localCard.innerHTML = '';
+        const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = localStream;
+        if (localCard) localCard.appendChild(v);
+        document.getElementById('localStatus')?.classList.remove('offline'); document.getElementById('localStatus')?.classList.add('online');
       } catch(e){
         console.error('getUserMedia err', e);
         showNotification('⚠️ Camera/mic access denied', 'danger');
@@ -328,51 +408,43 @@
 
     async function createPeerConnection(){
       const iceServers = await getIceServers();
-      const config = { iceServers, iceCandidatePoolSize:10 };
+      const config = { iceServers, iceCandidatePoolSize: 10 };
       peerConnection = new RTCPeerConnection(config);
 
-      // add local tracks
       if (!localStream) await prepareLocalStreamIfNeeded();
       localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
       peerConnection.ontrack = (ev) => {
         const remoteCard = document.getElementById('remoteCard');
-        remoteCard.innerHTML = '';
-        const rv = document.createElement('video');
-        rv.autoplay = true; rv.playsInline = true; rv.srcObject = ev.streams[0];
-        remoteCard.appendChild(rv);
-        document.getElementById('remoteStatus').classList.remove('offline'); document.getElementById('remoteStatus').classList.add('online');
+        if (remoteCard) { remoteCard.innerHTML = ''; const rv = document.createElement('video'); rv.autoplay = true; rv.playsInline = true; rv.srcObject = ev.streams[0]; remoteCard.appendChild(rv); }
+        document.getElementById('remoteStatus')?.classList.remove('offline'); document.getElementById('remoteStatus')?.classList.add('online');
       };
 
       peerConnection.onicecandidate = (event) => {
-        if (event.candidate && partnerId) {
-          socket.emit('signal', { to: partnerId, data: { type:'candidate', candidate: event.candidate } });
-        }
+        if (event.candidate && partnerId) socket.emit('signal', { to: partnerId, data: { type:'candidate', candidate: event.candidate } });
       };
 
       peerConnection.onconnectionstatechange = () => {
         console.log('pc state', peerConnection.connectionState);
         if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-          showNotification('⚠️ Connection problem — trying new partner', 'warning');
-          // auto try to reconnect by triggering nextPartner
-          setTimeout(() => { nextPartner(); }, 1200);
+          showNotification('⚠️ Connection issue — finding new partner', 'warning');
+          setTimeout(()=> { nextPartner(); }, 1200);
         }
       };
 
       return peerConnection;
     }
 
-    // handshake flow when we are initiator
+    // offer/answer flows
     async function handleOfferAnswerAsNeeded(){
       try {
         await createPeerConnection();
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         socket.emit('signal', { to: partnerId, data: { type:'offer', offer } });
-      } catch(e){ console.error('offer flow err', e) }
+      } catch(e){ console.error('offer flow error', e); }
     }
 
-    // when receiving offer from other side
     async function handleIncomingOffer(offer, from){
       try {
         partnerId = from;
@@ -381,10 +453,10 @@
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
         socket.emit('signal', { to: from, data: { type:'answer', answer } });
-      } catch(e){ console.error('incoming offer err', e) }
+      } catch(e){ console.error('incoming offer error', e); }
     }
 
-    // cleanup
+    // cleanup PC
     function cleanupPeer(){
       try {
         if (peerConnection) {
@@ -393,17 +465,18 @@
           peerConnection.close();
         }
       } catch(e){}
-      try { document.getElementById('remoteCard').innerHTML = '<div class="bg-layer"></div><div class="video-label">Partner</div><div id="remoteStatus" class="status-indicator offline"></div><div class="video-placeholder">⏳ Finding Partner…</div>'; } catch(e){}
       peerConnection = null; partnerId = null;
+      resetRemotePlaceholder();
     }
 
     function resetRemotePlaceholder(){
       const remoteCard = document.getElementById('remoteCard');
+      if (!remoteCard) return;
       remoteCard.innerHTML = '<div class="bg-layer"></div><div class="video-label">Partner</div><div id="remoteStatus" class="status-indicator offline"></div><div class="video-placeholder">⏳ Finding Partner…</div>';
     }
 
-    // CHAT
-    window.handleChatInput = function(e){
+    // -------- CHAT functions ----------
+    window.handleChatInput = function (e) {
       if (e.key === 'Enter' && !e.shiftKey){
         e.preventDefault();
         const t = e.target; const text = t.value.trim();
@@ -419,35 +492,44 @@
       socket.emit('chatMessage', { text });
       addMessage('You', text, true);
     }
-    window.sendChatFromUI = function(){ const el=document.getElementById('chatInput'); sendChatMessage(el.value.trim()); el.value=''; };
+    window.sendChatFromUI = function(){ const el = document.getElementById('chatInput'); if (!el) return; sendChatMessage(el.value.trim()); el.value=''; };
 
     function addMessage(sender, text, isOwn){
-      const box = document.getElementById('chatMessages');
-      const div = document.createElement('div'); div.className = 'message ' + (isOwn ? 'own' : 'other');
-      div.innerHTML = `<strong>${sender}:</strong> ${escapeHtml(text)}`;
+      const box = document.getElementById('chatMessages'); if (!box) return;
+      const div = document.createElement('div'); div.className = 'message ' + (isOwn ? 'own' : 'other'); div.innerHTML = `<strong>${escapeHtml(sender)}:</strong> ${escapeHtml(text)}`;
       box.appendChild(div); box.scrollTop = box.scrollHeight;
     }
-    function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-    // UI actions
-    window.startChat = async function(){
+    // ---------- UI actions ----------
+    window.startChatFromLogin = async function(){
+      // Transition animation: shrink login and show app
+      document.getElementById('loginView').style.transform = 'translateY(-40px) scale(.96)';
+      document.getElementById('loginView').style.opacity = '0';
+      setTimeout(()=> { document.getElementById('loginView').style.display = 'none'; openAppView(); }, 420);
       await initApp();
       await prepareLocalStreamIfNeeded();
       socket.emit('find-partner');
       showNotification('🔍 Searching for a partner...', 'info');
     };
 
+    function openAppView(){
+      document.getElementById('appView').style.display = 'block';
+      document.getElementById('appView').style.opacity = '0';
+      setTimeout(()=> { document.getElementById('appView').style.opacity = '1'; }, 40);
+    }
+
     window.startDemo = function(){
-      // demo mode: fake partner responses
-      document.getElementById('landing')?.remove?.();
+      // demo mode: show app view and simulated partner
+      document.getElementById('loginView').style.display = 'none';
+      openAppView();
       document.getElementById('chatMessages').innerHTML = '';
-      addMessage('System', '🎬 Demo mode: You are chatting with a virtual partner.', false);
-      setTimeout(()=> addMessage('Partner','Hi! I am your demo partner 😊', false), 700);
+      addMessage('System','🎬 Demo mode active — you are chatting with a virtual partner.',false);
+      setTimeout(()=> addMessage('Partner','Hey! I am a demo partner 😄', false), 800);
     };
 
     window.nextPartner = function(){
-      // remove listeners to avoid duplicates
-      if (socket){
+      if (socket) {
+        // safe remove of critical listeners to avoid duplicates
         socket.removeAllListeners('signal');
         socket.removeAllListeners('partner-found');
         socket.removeAllListeners('chatMessage');
@@ -457,75 +539,94 @@
       resetRemotePlaceholder();
       initSocketListeners();
       if (socket) { socket.emit('find-partner'); showNotification('🔄 Searching for a new partner...', 'info'); }
-      else initApp().then(()=> socket.emit('find-partner'));
+      else initApp().then(()=> { socket.emit('find-partner'); showNotification('🔄 Searching for a new partner...', 'info'); });
     };
 
     window.endChat = function(){
       if (socket && partnerId) socket.emit('end-chat');
-      cleanupPeer();
-      showNotification('Chat ended.', 'info');
+      cleanupPeer(); showNotification('Chat ended.', 'info');
     };
 
     window.reportUser = function(){
       try {
         const payload = { userEmail: localStorage.getItem('email') || 'anon', reason: 'Inappropriate behavior' };
         fetch(`${API_BASE}/api/report`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-      } catch(e){ console.warn(e) }
+      } catch(e) { console.warn(e); }
       showNotification('User reported.', 'warning');
     };
 
-    // toggles
     window.toggleAudio = function(){
       if (!localStream) return showNotification('No local stream', 'warning');
-      isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
-      document.getElementById('muteBtn').textContent = isMuted ? 'Unmute' : 'Mute';
-    };
-    window.toggleCamera = function(){
-      if (!localStream) return showNotification('No local stream', 'warning');
-      cameraOff = !cameraOff; localStream.getVideoTracks().forEach(t => t.enabled = !cameraOff);
-      document.getElementById('camBtn').textContent = cameraOff ? 'Camera On' : 'Camera';
+      isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted); document.getElementById('muteBtn').textContent = isMuted ? 'Unmute' : 'Mute';
     };
 
-    // Auth (simple auth route hooking)
+    window.toggleCamera = function(){
+      if (!localStream) return showNotification('No local stream', 'warning');
+      cameraOff = !cameraOff; localStream.getVideoTracks().forEach(t => t.enabled = !cameraOff); document.getElementById('camBtn').textContent = cameraOff ? 'Camera On' : 'Camera';
+    };
+
+    // ---------- Auth (simple) ----------
     window.handleAuth = async function(e){
       e && e.preventDefault && e.preventDefault();
       const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      const department = document.getElementById('department').value;
+      const password = document.getElementById('password')?.value || '';
+      const department = document.getElementById('department')?.value || '';
       try {
         const res = await fetch(`${API_BASE}/api/auth`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email, password, department }) });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         localStorage.setItem('token', data.token); localStorage.setItem('email', data.email);
-        hideModal('auth');
-        showNotification('Welcome ' + data.email, 'success');
-        startChat();
-      } catch(err){ console.error(err); showNotification('Login failed: '+ (err.message||err), 'danger'); }
+        setSignedEmail(data.email); closeAuth(); showNotification('Welcome ' + data.email, 'success');
+        // automatically open chat as logged-in user
+        startChatAfterAuth();
+      } catch(err){ console.error(err); showNotification('Login failed: ' + (err.message || err), 'danger'); }
     };
 
-    // normalize & escape helper
-    function normalizePayload(p){ return (typeof p === 'string') ? p : p.text || p.msg || JSON.stringify(p); }
+    async function startChatAfterAuth(){
+      // hide login and open app then start
+      document.getElementById('loginView').style.display = 'none';
+      openAppView();
+      await initApp();
+      await prepareLocalStreamIfNeeded();
+      socket.emit('find-partner');
+    }
 
-    // util: escape injection (used earlier)
-    // initialize on load
-    window.addEventListener('load', ()=> { initApp().catch(e=>console.warn(e)); });
+    window.logout = function(){
+      localStorage.removeItem('token'); localStorage.removeItem('email'); setSignedEmail('Anonymous'); showNotification('Logged out', 'info'); closeAuth();
+    };
 
-    // tiny 3D tilt effect for stage (non-blocking)
+    // ---------- small helpers ----------
+    function normalizePayload(p){ if (!p) return ''; if (typeof p === 'string') { try{ const q = JSON.parse(p); return q.text || q.msg || p; }catch{ return p; } } return p.text || p.msg || JSON.stringify(p); }
+
+    // init on load
+    window.addEventListener('load', ()=> {
+      // show login by default
+      document.getElementById('loginView').style.display = 'grid';
+      document.getElementById('appView').style.display = 'none';
+      // fill email if present
+      const email = localStorage.getItem('email'); if (email) setSignedEmail(email);
+      // init socket in background
+      initApp().catch(e=> console.warn(e));
+    });
+
+    // ---- tiny 3D tilt for stage (non-blocking) ----
     (function(){
       const stage = document.getElementById('videoStage');
       if (!stage || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       function onmove(e){
-        const r = stage.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
-        const dx = (e.clientX - cx)/r.width, dy = (e.clientY - cy)/r.height;
-        Array.from(stage.querySelectorAll('.video-card')).forEach((card,i)=>{
-          const depth = i===0?8:18;
-          const rx = dy*depth, ry = dx*depth;
+        const r = stage.getBoundingClientRect(); const cx = r.left + r.width/2; const cy = r.top + r.height/2;
+        const dx = (e.clientX - cx)/r.width; const dy = (e.clientY - cy)/r.height;
+        Array.from(stage.querySelectorAll('.video-card')).forEach((card,i)=> {
+          const depth = i===0?8:18; const rx = dy*depth; const ry = dx*depth;
           card.style.transform = `rotateX(${ -rx }deg) rotateY(${ ry }deg) translateZ(${ depth }px)`;
         });
       }
       window.addEventListener('mousemove', onmove);
-      window.addEventListener('mouseleave', ()=>{ Array.from(stage.querySelectorAll('.video-card')).forEach(c=>c.style.transform=''); });
+      window.addEventListener('mouseleave', ()=> Array.from(stage.querySelectorAll('.video-card')).forEach(c=> c.style.transform=''));
     })();
+
+    // expose for debugging if needed
+    window._uc_debug = { getState: ()=> ({ socket: !!socket, pc: !!peerConnection, partnerId, localStream: !!localStream }) };
   })();
   </script>
 </body>
