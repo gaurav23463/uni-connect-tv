@@ -202,425 +202,311 @@
 
   <!-- Load Socket.IO before our app script -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+(async function () {
+  const API_BASE = "https://uni-connect-tv-5.onrender.com";
+  const STUN_TURN_SERVERS = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      // Optional TURN (add your credentialed TURN later for production)
+    ],
+  };
 
-  <!-- Application JS: single-file, no nested scripts -->
-  <script>
-    (function () {
-      // ----- CONFIG -----
-      const API_BASE = "https://uni-connect-tv-5.onrender.com"; // confirmed by you
-      const STUN_SERVERS = [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ];
+  let socket = null, pc = null, localStream = null, partnerId = null;
+  let token = null, isDemo = false, isMuted = false, isCameraOn = true;
+  let isDark = true, filterMode = 0;
 
-      // ----- STATE -----
-      let socket = null;
-      let pc = null; // RTCPeerConnection
-      let localStream = null;
-      let partnerId = null;
-      let token = null;
-      let isDemo = false;
-      let isMuted = false;
-      let isCameraOn = true;
+  const landing = document.getElementById("landing");
+  const chatInterface = document.getElementById("chatInterface");
+  const loginModal = document.getElementById("loginModal");
+  const loginBtn = document.getElementById("loginBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  const loginForm = document.getElementById("loginForm");
+  const demoChatBtn = document.getElementById("demoChatBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const profileAvatar = document.getElementById("profileAvatar");
+  const videoLocal = document.getElementById("videoLocal");
+  const videoRemote = document.getElementById("videoRemote");
+  const chatMessages = document.getElementById("chatMessages");
+  const chatInput = document.getElementById("chatInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const btnMute = document.getElementById("btnMute");
+  const btnCamera = document.getElementById("btnCamera");
+  const btnNext = document.getElementById("btnNext");
+  const btnReport = document.getElementById("btnReport");
+  const btnEnd = document.getElementById("btnEnd");
+  const toastContainer = document.getElementById("toastContainer");
+  const filterBtn = document.getElementById("filterBtn");
+  const themeBtn = document.getElementById("themeBtn");
+  const blurBtn = document.getElementById("blurBtn");
 
-      // ----- ELEMENTS -----
-      const landing = document.getElementById("landing");
-      const chatInterface = document.getElementById("chatInterface");
-      const loginModal = document.getElementById("loginModal");
-      const loginBtn = document.getElementById("loginBtn");
-      const cancelBtn = document.getElementById("cancelBtn");
-      const loginForm = document.getElementById("loginForm");
-      const demoChatBtn = document.getElementById("demoChatBtn");
-      const profileAvatar = document.getElementById("profileAvatar");
-      const logoutBtn = document.getElementById("logoutBtn");
-      const videoLocal = document.getElementById("videoLocal");
-      const videoRemote = document.getElementById("videoRemote");
-      const videoLocalBox = document.getElementById("videoLocalBox");
-      const videoRemoteBox = document.getElementById("videoRemoteBox");
-      const localStatus = document.getElementById("localStatus");
-      const remoteStatus = document.getElementById("remoteStatus");
-      const btnMute = document.getElementById("btnMute");
-      const btnCamera = document.getElementById("btnCamera");
-      const btnNext = document.getElementById("btnNext");
-      const btnReport = document.getElementById("btnReport");
-      const btnEnd = document.getElementById("btnEnd");
-      const chatMessages = document.getElementById("chatMessages");
-      const chatInput = document.getElementById("chatInput");
-      const sendBtn = document.getElementById("sendBtn");
-      const floatingToolbar = document.getElementById("floatingToolbar");
-      const toastContainer = document.getElementById("toastContainer");
-      const filterBtn = document.getElementById("filterBtn");
-      const themeBtn = document.getElementById("themeBtn");
-      const blurBtn = document.getElementById("blurBtn");
+  // 🟢 Add Status Bar
+  const statusBar = document.createElement("div");
+  statusBar.id = "connectionStatus";
+  statusBar.style.cssText = `
+    text-align:center;padding:8px;
+    background:#111;border-bottom:1px solid #333;
+    color:#00f0ff;font-weight:600;
+    letter-spacing:1px;
+  `;
+  chatInterface.prepend(statusBar);
 
-      // ----- HELPERS -----
-      function showToast(msg, type = "info") {
-        const d = document.createElement("div");
-        d.className = "toast";
-        d.textContent = msg;
-        toastContainer.appendChild(d);
-        setTimeout(() => d.remove(), 3500);
+  function updateStatus(status, color) {
+    statusBar.innerHTML = status;
+    statusBar.style.color = color;
+  }
+
+  // 🟢 Utility Toast
+  function showToast(msg) {
+    const d = document.createElement("div");
+    d.className = "toast";
+    d.textContent = msg;
+    toastContainer.appendChild(d);
+    setTimeout(() => d.remove(), 3500);
+  }
+
+  function addMessage(sender, text, isOwn = false) {
+    const el = document.createElement("div");
+    el.className = "message " + (isOwn ? "sent" : "received");
+    el.textContent = (isOwn ? "You: " : sender + ": ") + text;
+    chatMessages.appendChild(el);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function resetChatUI() {
+    chatMessages.innerHTML = '<div class="message received">Welcome to Uni-Connect TV! 👋</div>';
+    videoRemote.srcObject = null;
+    videoRemote.style.display = "none";
+  }
+
+  // 🟢 Auth
+  loginBtn.onclick = () => loginModal.classList.add("active");
+  cancelBtn.onclick = () => loginModal.classList.remove("active");
+
+  loginForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const department = document.getElementById("department").value;
+    try {
+      const res = await fetch(`${API_BASE}/api/auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, department }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Login failed");
+      token = data.token;
+      localStorage.setItem("token", token);
+      profileAvatar.textContent = email.charAt(0).toUpperCase();
+      loginModal.classList.remove("active");
+      isDemo = false;
+      showToast("✅ Login successful");
+      goToChat();
+    } catch (err) {
+      showToast("❌ " + err.message);
+    }
+  };
+
+  demoChatBtn.onclick = () => {
+    isDemo = true;
+    profileAvatar.textContent = "D";
+    showToast("🎭 Demo mode started");
+    goToChat();
+  };
+
+  logoutBtn.onclick = () => {
+    cleanupPeer();
+    stopMedia();
+    chatInterface.style.display = "none";
+    landing.style.display = "flex";
+    landing.classList.remove("hidden");
+    updateStatus("🔴 Disconnected", "red");
+    showToast("👋 Logged out");
+  };
+
+  // 🟢 Move to Chat Screen
+  async function goToChat() {
+    landing.classList.add("hidden");
+    setTimeout(() => {
+      landing.style.display = "none";
+      chatInterface.style.display = "flex";
+    }, 500);
+    resetChatUI();
+    await initMedia();
+    initSocket();
+  }
+
+  // 🟢 Media
+  async function initMedia() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: 30 },
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      videoLocal.srcObject = localStream;
+      videoLocal.style.display = "block";
+    } catch (err) {
+      showToast("⚠️ Allow camera & mic access!");
+      console.error(err);
+    }
+  }
+
+  function stopMedia() {
+    localStream?.getTracks().forEach((t) => t.stop());
+    localStream = null;
+    videoLocal.srcObject = null;
+  }
+
+  // 🟢 Socket
+  function initSocket() {
+    socket?.disconnect();
+    socket = io(API_BASE, token ? { auth: { token } } : {});
+
+    socket.on("connect", () => {
+      updateStatus("🟡 Searching for Partner...", "#ffc107");
+      socket.emit("find-partner", { demo: isDemo });
+    });
+
+    socket.on("waiting", () => updateStatus("🟡 Waiting for Partner...", "#ffc107"));
+
+    socket.on("partner-found", async (id) => {
+      partnerId = id;
+      updateStatus("🟢 Connected", "#4ade80");
+      showToast("🎉 Partner found!");
+      await createPeer();
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
+    });
+
+    socket.on("signal", async ({ from, data }) => {
+      if (data.type === "offer") {
+        partnerId = from;
+        await createPeer();
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("signal", { to: from, data: { type: "answer", answer } });
+      } else if (data.type === "answer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } else if (data.type === "candidate" && pc) {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
+    });
 
-      function resetChatUI() {
-        // clear partner's video and chat
-        chatMessages.innerHTML = "";
-        const welcome = document.createElement("div");
-        welcome.className = "message received";
-        welcome.textContent = "Welcome to Uni-Connect TV! 👋";
-        chatMessages.appendChild(welcome);
-        videoRemote.style.display = "none";
-        videoRemote.srcObject = null;
-        videoRemoteBox.classList.remove("active");
-        remoteStatus.classList.add("offline");
-      }
+    socket.on("partner-left", () => {
+      updateStatus("🔴 Partner Disconnected", "red");
+      showToast("❌ Partner left");
+      cleanupPeer();
+      resetChatUI();
+      socket.emit("find-partner");
+    });
 
-      function addMessage(sender, text, isOwn = false) {
-        const el = document.createElement("div");
-        el.className = "message " + (isOwn ? "sent" : "received");
-        el.textContent = (isOwn ? "You: " : sender + ": ") + text;
-        chatMessages.appendChild(el);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      }
+    socket.on("chatMessage", (data) => {
+      const msg = typeof data === "string" ? data : data.text;
+      addMessage("Partner", msg);
+    });
+  }
 
-      // ----- AUTH -----
-      loginBtn.addEventListener("click", () => loginModal.classList.add("active"));
-      cancelBtn.addEventListener("click", () => loginModal.classList.remove("active"));
+  // 🟢 WebRTC
+  async function createPeer() {
+    if (pc) pc.close();
+    pc = new RTCPeerConnection(STUN_TURN_SERVERS);
 
-      loginForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const email = document.getElementById("email").value;
-        const password = document.getElementById("password").value;
-        const department = document.getElementById("department").value;
-        try {
-          const res = await fetch(`${API_BASE}/api/auth`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password, department }),
-          });
-          if (!res.ok) {
-            const txt = await res.text();
-            throw new Error(txt || "Auth failed");
-          }
-          const data = await res.json();
-          token = data.token;
-          localStorage.setItem("token", token);
-          localStorage.setItem("email", data.email);
-          profileAvatar.textContent = (data.email || "U").charAt(0).toUpperCase();
-          loginModal.classList.remove("active");
-          isDemo = false;
-          showToast("Login successful", "success");
-          await goToChat();
-        } catch (err) {
-          console.error("auth err", err);
-          showToast("Login failed: " + (err.message || err), "danger");
-        }
-      });
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
-      demoChatBtn.addEventListener("click", async () => {
-        // demo user (no backend auth)
-        isDemo = true;
-        profileAvatar.textContent = "D";
-        token = null;
-        showToast("Demo mode: connecting (no saved data)", "info");
-        await goToChat();
-      });
+    pc.ontrack = (e) => {
+      const stream = e.streams[0];
+      videoRemote.srcObject = stream;
+      videoRemote.style.display = "block";
+    };
 
-      logoutBtn.addEventListener("click", () => {
-        // stop media, disconnect socket
-        stopLocalStream();
-        if (socket) socket.disconnect();
-        socket = null;
-        token = null;
-        isDemo = false;
-        chatInterface.style.display = "none";
-        landing.style.display = "flex";
-        showToast("Logged out", "success");
-      });
+    pc.onicecandidate = (e) => {
+      if (e.candidate && partnerId)
+        socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: e.candidate } });
+    };
+  }
 
-      // ----- NAVIGATION to CHAT -----
-      async function goToChat() {
-        landing.classList.add("hidden");
-        setTimeout(() => {
-          landing.style.display = "none";
-          chatInterface.style.display = "flex";
-          chatInterface.classList.add("active");
-          floatingToolbar.style.display = "flex";
-        }, 450);
+  function cleanupPeer() {
+    pc?.close();
+    pc = null;
+    partnerId = null;
+  }
 
-        resetChatUI();
-        // init socket & media
-        await initLocalMedia();
-        initSocket(); // sets up events and emits find-partner
-      }
+  // 🟢 Chat
+  sendBtn.onclick = sendMessage;
+  chatInput.addEventListener("keypress", (e) => e.key === "Enter" && sendMessage());
 
-      // ----- MEDIA -----
-      async function initLocalMedia() {
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-            audio: true,
-          });
-          videoLocal.srcObject = localStream;
-          videoLocal.style.display = "block";
-          document.querySelector("#videoLocalBox .video-placeholder").style.display = "none";
-          localStatus.classList.remove("offline");
-        } catch (err) {
-          console.error("getUserMedia error", err);
-          showToast("Allow camera & microphone", "warning");
-        }
-      }
+  function sendMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    addMessage("You", text, true);
+    chatInput.value = "";
+    if (!partnerId) {
+      addMessage("🤖 Bot", "No partner yet — please wait!", false);
+      return;
+    }
+    socket.emit("chatMessage", { text });
+  }
 
-      function stopLocalStream() {
-        if (!localStream) return;
-        localStream.getTracks().forEach((t) => t.stop());
-        localStream = null;
-        videoLocal.srcObject = null;
-        videoLocal.style.display = "none";
-        document.querySelector("#videoLocalBox .video-placeholder").style.display = "block";
-        localStatus.classList.add("offline");
-      }
+  // 🟢 Controls
+  btnMute.onclick = () => {
+    isMuted = !isMuted;
+    localStream?.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
+    btnMute.textContent = isMuted ? "🔇" : "🎤";
+    showToast(isMuted ? "Muted" : "Unmuted");
+  };
 
-      // ----- SOCKET.IO + SIGNALING -----
-      function initSocket() {
-        // prevent multiple initializations
-        if (socket && socket.connected) {
-          // already connected; ask for partner
-          socket.emit("find-partner", { demo: isDemo });
-          return;
-        }
+  btnCamera.onclick = () => {
+    isCameraOn = !isCameraOn;
+    localStream?.getVideoTracks().forEach((t) => (t.enabled = isCameraOn));
+    btnCamera.textContent = isCameraOn ? "🎥" : "📷";
+    showToast(isCameraOn ? "Camera On" : "Camera Off");
+  };
 
-        // connect; include token if available
-        const connectOpts = token ? { auth: { token } } : {};
-        socket = io(API_BASE, connectOpts);
+  btnNext.onclick = () => {
+    showToast("🔄 Next partner...");
+    cleanupPeer();
+    socket.emit("next-partner");
+    resetChatUI();
+  };
 
-        socket.on("connect", () => {
-          console.log("socket connected", socket.id);
-          showToast("Socket connected", "success");
-          // ask server to find partner
-          socket.emit("find-partner", { demo: isDemo });
-        });
+  btnEnd.onclick = () => {
+    cleanupPeer();
+    socket.emit("end-chat");
+    stopMedia();
+    chatInterface.style.display = "none";
+    landing.style.display = "flex";
+    landing.classList.remove("hidden");
+    updateStatus("🔴 Disconnected", "red");
+  };
 
-        socket.on("waiting", () => {
-          showToast("Waiting for partner...", "info");
-        });
+  // 🟢 Toolbar
+  filterBtn.onclick = () => {
+    filterMode = (filterMode + 1) % 3;
+    let filter = "none", name = "Normal";
+    if (filterMode === 1) { filter = "grayscale(0.5)"; name = "Grayscale"; }
+    if (filterMode === 2) { filter = "sepia(0.6)"; name = "Sepia"; }
+    videoLocal.style.filter = filter;
+    showToast(`🎨 Filter: ${name}`);
+  };
 
-        socket.on("partner-found", async (id) => {
-          // server gives partner socket id
-          partnerId = id;
-          showToast("Partner found — establishing connection...", "success");
-          // create PC and initiate offer
-          await ensurePeerConnection();
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.emit("signal", { to: partnerId, data: { type: "offer", offer: offer } });
-          } catch (err) {
-            console.error("offer error", err);
-          }
-        });
+  themeBtn.onclick = () => {
+    isDark = !isDark;
+    document.documentElement.style.setProperty("--bg-dark", isDark ? "#0f0f10" : "#f0f0f0");
+    document.body.style.color = isDark ? "#fff" : "#000";
+    showToast(`🔦 Theme: ${isDark ? "Dark" : "Light"}`);
+  };
 
-        socket.on("signal", async ({ from, data }) => {
-          // incoming signaling data
-          try {
-            if (data.type === "offer") {
-              partnerId = from;
-              await ensurePeerConnection();
-              await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              socket.emit("signal", { to: from, data: { type: "answer", answer } });
-            } else if (data.type === "answer") {
-              await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } else if (data.type === "candidate") {
-              if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-            }
-          } catch (err) {
-            console.error("signal handling error", err);
-          }
-        });
+  blurBtn.onclick = () => {
+    const cur = videoLocal.style.backdropFilter;
+    videoLocal.style.backdropFilter = cur ? "" : "blur(8px)";
+    showToast(cur ? "💫 Blur Off" : "💫 Blur On");
+  };
+})();
+</script>
 
-        socket.on("chatMessage", (payload) => {
-          // payload can be either { sender, text } or simple string
-          if (!payload) return;
-          if (typeof payload === "string") {
-            addMessage("Partner", payload, false);
-            return;
-          }
-          if (payload.sender && payload.text) {
-            addMessage(payload.sender, payload.text, false);
-            return;
-          }
-          // fallback
-          addMessage("Partner", JSON.stringify(payload), false);
-        });
-
-        socket.on("partner-left", () => {
-          showToast("Partner disconnected", "warning");
-          cleanupPeerConnection();
-          // clear partner UI
-          videoRemote.srcObject = null;
-          videoRemote.style.display = "none";
-          videoRemoteBox.classList.remove("active");
-          remoteStatus.classList.add("offline");
-        });
-
-        socket.on("connect_error", (err) => {
-          console.error("socket connect_error", err);
-          showToast("Socket connect error", "danger");
-        });
-      }
-
-      // ensure PC and handlers set once
-      async function ensurePeerConnection() {
-        if (pc) return pc;
-        pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
-
-        // add local tracks
-        if (localStream) {
-          localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
-        }
-
-        // remote track
-        pc.ontrack = (ev) => {
-          const [stream] = ev.streams;
-          videoRemote.srcObject = stream;
-          videoRemote.style.display = "block";
-          document.querySelector("#videoRemoteBox .video-placeholder").style.display = "none";
-          videoRemoteBox.classList.add("active");
-          remoteStatus.classList.remove("offline");
-        };
-
-        // ice candidates
-        pc.onicecandidate = (ev) => {
-          if (ev.candidate && partnerId && socket) {
-            socket.emit("signal", { to: partnerId, data: { type: "candidate", candidate: ev.candidate } });
-          }
-        };
-
-        pc.onconnectionstatechange = () => {
-          console.log("pc state", pc.connectionState);
-          if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-            showToast("Connection problem — trying to reconnect", "warning");
-            // you can decide to re-find partner
-          }
-        };
-
-        return pc;
-      }
-
-      function cleanupPeerConnection() {
-        if (pc) {
-          try { pc.close(); } catch (e) {}
-          pc = null;
-        }
-        partnerId = null;
-      }
-
-      // ----- CONTROLS -----
-      btnMute.addEventListener("click", () => {
-        isMuted = !isMuted;
-        if (localStream) {
-          localStream.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
-        }
-        btnMute.textContent = isMuted ? "🔇" : "🎤";
-        showToast(isMuted ? "Muted" : "Unmuted", "info");
-      });
-
-      btnCamera.addEventListener("click", () => {
-        isCameraOn = !isCameraOn;
-        if (localStream) {
-          localStream.getVideoTracks().forEach((t) => (t.enabled = isCameraOn));
-        }
-        btnCamera.textContent = isCameraOn ? "🎥" : "📷";
-        showToast(isCameraOn ? "Camera On" : "Camera Off", "info");
-      });
-
-      btnNext.addEventListener("click", () => {
-        showToast("Finding next partner...", "info");
-        // stop current pc and ask server
-        cleanupPeerConnection();
-        socket?.emit("next-partner");
-        resetChatUI();
-      });
-
-      btnReport.addEventListener("click", async () => {
-        const ok = confirm("Report this user for inappropriate behavior?");
-        if (!ok) return;
-        try {
-          const body = { reason: "Inappropriate behavior", reportedAt: new Date().toISOString() };
-          // include token if available
-          const res = await fetch(`${API_BASE}/api/report`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            body: JSON.stringify(body),
-          });
-          if (!res.ok) throw new Error(await res.text());
-          showToast("User reported. Thank you.", "success");
-        } catch (err) {
-          console.error("report err", err);
-          showToast("Report failed", "danger");
-        }
-      });
-
-      btnEnd.addEventListener("click", () => {
-        cleanupPeerConnection();
-        socket?.emit("end-chat", { partnerId });
-        // stop media but keep UI to landing
-        stopLocalStream();
-        chatInterface.style.display = "none";
-        landing.style.display = "flex";
-        showToast("Chat ended", "info");
-      });
-
-      // chat send
-      sendBtn.addEventListener("click", sendChat);
-      chatInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") sendChat();
-      });
-
-      function sendChat() {
-        const txt = chatInput.value.trim();
-        if (!txt) return;
-        addMessage("You", txt, true);
-        chatInput.value = "";
-        // emit structured message
-        if (socket && socket.connected) {
-          socket.emit("chatMessage", { sender: localStorage.getItem("email") || (isDemo ? "Demo" : "You"), text: txt });
-        } else {
-          // if no socket, local echo only
-          showToast("Not connected to server", "warning");
-        }
-      }
-
-      // toolbar features (UI only)
-      filterBtn.addEventListener("click", () => {
-        const f = videoLocal.style.filter;
-        if (!f) videoLocal.style.filter = "grayscale(0.5)";
-        else if (f.includes("grayscale")) videoLocal.style.filter = "sepia(0.6)";
-        else videoLocal.style.filter = "";
-        showToast("Filter toggled", "info");
-      });
-      themeBtn.addEventListener("click", () => {
-        const c = getComputedStyle(document.documentElement).getPropertyValue("--bg-dark").trim();
-        if (c === "#0f0f10") document.documentElement.style.setProperty("--bg-dark", "#1a1a2e");
-        else document.documentElement.style.setProperty("--bg-dark", "#0f0f10");
-        showToast("Theme toggled", "info");
-      });
-      blurBtn.addEventListener("click", () => {
-        const cur = videoLocal.style.backdropFilter;
-        videoLocal.style.backdropFilter = cur ? "" : "blur(8px)";
-        showToast("Local blur toggled", "info");
-      });
-
-      // init: restore token if present
-      (function init() {
-        const stored = localStorage.getItem("token");
-        if (stored) token = stored;
-        // optionally show landing
-        landing.style.display = "flex";
-      })();
-    })();
-  </script>
 </body>
 </html>
