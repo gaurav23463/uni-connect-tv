@@ -1,73 +1,80 @@
 // server/socket/videoSocket.js
-// server/socket/videoSocket.js
-
 export const videoSocketHandler = (io) => {
-  let waitingUser = null;
-  const pairs = new Map();
+  let waitingUser = null; // store socket.id
+  const pairs = new Map(); // socket.id -> partnerId
 
   io.on("connection", (socket) => {
     console.log("⚡ User connected:", socket.id);
 
-    // ✅ Find a random partner
+    // find partner
     socket.on("find-partner", () => {
-      if (!waitingUser) {
-        waitingUser = socket;
-        socket.emit("waiting");
-        console.log("🕒 Waiting user:", socket.id);
-      } else if (waitingUser.id !== socket.id) {
-        const partner = waitingUser;
+      if (waitingUser && waitingUser !== socket.id) {
+        const partnerId = waitingUser;
         waitingUser = null;
 
-        // store pairing
-        pairs.set(socket.id, partner.id);
-        pairs.set(partner.id, socket.id);
+        pairs.set(socket.id, partnerId);
+        pairs.set(partnerId, socket.id);
 
-        socket.emit("partner-found", partner.id);
-        partner.emit("partner-found", socket.id);
+        socket.emit("partner-found", partnerId);
+        io.to(partnerId).emit("partner-found", socket.id);
 
-        console.log(`🎉 Paired: ${socket.id} <--> ${partner.id}`);
+        console.log(`✅ Paired: ${socket.id} ↔ ${partnerId}`);
+      } else {
+        waitingUser = socket.id;
+        socket.emit("waiting");
+        console.log("🕒 Waiting user:", socket.id);
       }
     });
 
-    // ✅ WebRTC signaling
+    // relay webRTC signaling
     socket.on("signal", ({ to, data }) => {
       if (io.sockets.sockets.get(to)) {
         io.to(to).emit("signal", { from: socket.id, data });
       }
     });
 
-    // ✅ Handle user ending chat manually
-    socket.on("end-chat", ({ partnerId }) => {
+    // private chat
+    socket.on("chatMessage", ({ to, text }) => {
+      // if front-end provides 'to' use it, otherwise fallback to mapped partner
+      const partnerId = to || pairs.get(socket.id);
       if (partnerId && io.sockets.sockets.get(partnerId)) {
+        io.to(partnerId).emit("chatMessage", { text });
+      }
+    });
+
+    // next partner
+    socket.on("next-partner", () => {
+      const partnerId = pairs.get(socket.id);
+      if (partnerId) {
         io.to(partnerId).emit("partner-left");
         pairs.delete(partnerId);
       }
       pairs.delete(socket.id);
-      console.log(`🔚 Chat ended between ${socket.id} and ${partnerId}`);
+      waitingUser = socket.id;
+      socket.emit("waiting");
     });
 
-    // ✅ Handle disconnect
+    // end chat
+    socket.on("end-chat", () => {
+      const partnerId = pairs.get(socket.id);
+      if (partnerId) {
+        io.to(partnerId).emit("partner-left");
+        pairs.delete(partnerId);
+      }
+      pairs.delete(socket.id);
+    });
+
+    // disconnect cleanup
     socket.on("disconnect", () => {
       console.log("❌ User disconnected:", socket.id);
-
-      if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
-
+      if (waitingUser === socket.id) waitingUser = null;
       const partnerId = pairs.get(socket.id);
-      if (partnerId && io.sockets.sockets.get(partnerId)) {
+      if (partnerId) {
         io.to(partnerId).emit("partner-left");
         pairs.delete(partnerId);
       }
       pairs.delete(socket.id);
-    });
-
-    // ✅ Demo Mode pairing simulation
-    socket.on("start-demo", () => {
-      console.log("🎬 Demo mode for:", socket.id);
-      socket.emit("demo-start", {
-        message: "Welcome to demo mode! Simulated chat started.",
-      });
     });
   });
 };
-
 
