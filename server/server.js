@@ -17,15 +17,12 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "http://localhost:3000",
-      "http://localhost:5500",
-      "https://uni-connect-tv-1.vercel.app",
-      "https://uni-connect-tv-5.vercel.app",
+      "https://uni-connect-nk7clgrj-gaurav23463s-projects.vercel.app"
     ],
-    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
   })
 );
-
 app.use(express.json());
 app.use("/api", authRoutes);
 app.use("/api", chatRoutes);
