@@ -7,110 +7,65 @@ import { Server } from "socket.io";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
+import { videoSocketHandler } from "./socket/videoSocket.js";
 
 dotenv.config();
 connectDB();
 
 const app = express();
 
-app.use(cors({
-  origin: [
-    "https://uni-connect-nk7clgrj-gaurav23463s-projects.vercel.app"
-  ],
-  methods: ["GET", "POST"],
-  credentials: true
-}));
+// --- CORS: whitelist frontends (add your domains here) ---
+const ALLOWED_ORIGINS = [
+  "https://uni-connect-nk7clgrj-gaurav23463s-projects.vercel.app",
+  "https://uni-connect-nk7clgrj-gaurav23463s-projects-git-main-yourusername.vercel.app", // optional variants if used
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+];
 
+const corsOptions = {
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl, mobile apps)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS: " + origin));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  credentials: true,
+  maxAge: 86400 // cache preflight for 1 day
+};
+
+// apply CORS to all routes
+app.use(cors(corsOptions));
+
+// ensure OPTIONS preflight returns correct headers even if route not hit
+app.options("*", cors(corsOptions));
+
+// body parser
 app.use(express.json());
+
+// api routes
 app.use("/api", authRoutes);
 app.use("/api", chatRoutes);
 
+// create HTTP server + Socket.IO
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST"],
+    credentials: true
   },
 });
 
-let waitingUser = null;
-const userPairs = new Map(); // ✅ Track who is connected to whom
+// mount video socket handler (clean separation)
+videoSocketHandler(io);
 
-io.on("connection", (socket) => {
-  console.log("🔗 User connected:", socket.id);
-
-  // ✅ FIND PARTNER
-  socket.on("find-partner", () => {
-    if (waitingUser && waitingUser !== socket.id) {
-      const partnerId = waitingUser;
-      waitingUser = null;
-
-      userPairs.set(socket.id, partnerId);
-      userPairs.set(partnerId, socket.id);
-
-      socket.emit("partner-found", partnerId);
-      io.to(partnerId).emit("partner-found", socket.id);
-
-      console.log("✅ Paired:", socket.id, "↔", partnerId);
-    } else {
-      waitingUser = socket.id;
-      socket.emit("waiting");
-    }
-  });
-
-  // ✅ RELAY WEBRTC SIGNALS SAFELY
-  socket.on("signal", ({ to, data }) => {
-    io.to(to).emit("signal", { from: socket.id, data });
-  });
-
-  // ✅ PRIVATE CHAT (FIXED)
-  socket.on("chatMessage", ({ to, text }) => {
-    if (to) {
-      io.to(to).emit("chatMessage", { text });
-    }
-  });
-
-  // ✅ NEXT PARTNER
-  socket.on("next-partner", () => {
-    const partnerId = userPairs.get(socket.id);
-
-    if (partnerId) {
-      io.to(partnerId).emit("partner-left");
-      userPairs.delete(partnerId);
-    }
-
-    userPairs.delete(socket.id);
-    waitingUser = socket.id;
-
-    socket.emit("waiting");
-  });
-
-  // ✅ END CHAT
-  socket.on("end-chat", () => {
-    const partnerId = userPairs.get(socket.id);
-
-    if (partnerId) {
-      io.to(partnerId).emit("partner-left");
-      userPairs.delete(partnerId);
-    }
-
-    userPairs.delete(socket.id);
-  });
-
-  // ✅ DISCONNECT CLEANUP (FIXED)
-  socket.on("disconnect", () => {
-    if (waitingUser === socket.id) waitingUser = null;
-
-    const partnerId = userPairs.get(socket.id);
-    if (partnerId) {
-      io.to(partnerId).emit("partner-left");
-      userPairs.delete(partnerId);
-    }
-
-    userPairs.delete(socket.id);
-    console.log("❌ User disconnected:", socket.id);
-  });
-});
+// health route
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {
