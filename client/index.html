@@ -340,18 +340,26 @@
 
   // 🟢 Media
   async function initMedia() {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: 30 },
-        audio: { echoCancellation: true, noiseSuppression: true },
-      });
-      videoLocal.srcObject = localStream;
-      videoLocal.style.display = "block";
-    } catch (err) {
-      showToast("⚠️ Allow camera & mic access!");
-      console.error(err);
-    }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: 30 },
+      audio: { echoCancellation: true, noiseSuppression: true },
+    });
+
+    videoLocal.srcObject = localStream;
+    videoLocal.muted = true;
+    videoLocal.style.display = "block";
+
+    videoLocal.onloadedmetadata = () => {
+      videoLocal.play().catch(err => console.log("Local autoplay blocked", err));
+    };
+
+  } catch (err) {
+    showToast("⚠️ Allow camera & mic access!");
+    console.error(err);
   }
+}
+
 
   function stopMedia() {
     localStream?.getTracks().forEach((t) => t.stop());
@@ -381,20 +389,34 @@
       socket.emit("signal", { to: partnerId, data: { type: "offer", offer } });
     });
 
-    socket.on("signal", async ({ from, data }) => {
-      if (data.type === "offer") {
-        partnerId = from;
-        await createPeer();
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit("signal", { to: from, data: { type: "answer", answer } });
-      } else if (data.type === "answer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      } else if (data.type === "candidate" && pc) {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
+   socket.on("signal", async ({ from, data }) => {
+  if (data.type === "offer") {
+    partnerId = from;
+    await createPeer();
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    socket.emit("signal", {
+      to: from,
+      data: { type: "answer", answer }
     });
+
+  } else if (data.type === "answer") {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+
+  } else if (data.type === "candidate") {
+    if (pc && data.candidate) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (err) {
+        console.log("ICE candidate error:", err);
+      }
+    }
+  }
+});
+
 
     socket.on("partner-left", () => {
       updateStatus("🔴 Partner Disconnected", "red");
@@ -417,11 +439,18 @@
 
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
-    pc.ontrack = (e) => {
-      const stream = e.streams[0];
-      videoRemote.srcObject = stream;
-      videoRemote.style.display = "block";
-    };
+   pc.ontrack = (e) => {
+  const stream = e.streams[0];
+  videoRemote.srcObject = stream;
+  videoRemote.muted = false;
+  videoRemote.style.display = "block";
+
+  // ✅ FORCE PLAY (FIXES INVISIBLE VIDEO)
+  videoRemote.onloadedmetadata = () => {
+    videoRemote.play().catch(err => console.log("Autoplay blocked:", err));
+  };
+};
+
 
     pc.onicecandidate = (e) => {
       if (e.candidate && partnerId)
@@ -448,9 +477,11 @@
       addMessage("🤖 Bot", "No partner yet — please wait!", false);
       return;
     }
-    socket.emit("chatMessage", { text });
-  }
-
+     socket.emit("chatMessage", {
+    to: partnerId,
+    text
+  });
+}
   // 🟢 Controls
   btnMute.onclick = () => {
     isMuted = !isMuted;
