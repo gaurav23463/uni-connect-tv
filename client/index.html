@@ -347,12 +347,15 @@
     });
 
     videoLocal.srcObject = localStream;
-    videoLocal.muted = true;
-    videoLocal.style.display = "block";
+videoLocal.muted = true;
+videoLocal.style.display = "block";
 
-    videoLocal.onloadedmetadata = () => {
-      videoLocal.play().catch(err => console.log("Local autoplay blocked", err));
-    };
+videoLocal.onloadedmetadata = () => {
+  videoLocal.play().catch(err =>
+    console.log("Local autoplay blocked", err)
+  );
+};
+
 
   } catch (err) {
     showToast("⚠️ Allow camera & mic access!");
@@ -439,17 +442,19 @@
 
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
-   pc.ontrack = (e) => {
+  pc.ontrack = (e) => {
   const stream = e.streams[0];
   videoRemote.srcObject = stream;
   videoRemote.muted = false;
   videoRemote.style.display = "block";
 
-  // ✅ FORCE PLAY (FIXES INVISIBLE VIDEO)
   videoRemote.onloadedmetadata = () => {
-    videoRemote.play().catch(err => console.log("Autoplay blocked:", err));
+    videoRemote.play().catch(err =>
+      console.log("Autoplay blocked:", err)
+    );
   };
 };
+
 
 
     pc.onicecandidate = (e) => {
