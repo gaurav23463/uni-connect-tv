@@ -16,8 +16,9 @@ const app = express();
 
 // --- CORS: whitelist frontends (add your domains here) ---
 const ALLOWED_ORIGINS = [
+  "https://uni-connect-tv-1.vercel.app",
+  "https://uni-connect-evhny1cpg-gaurav23463s-projects.vercel.app",
   "https://uni-connect-nk7clgrj-gaurav23463s-projects.vercel.app",
- "https://uni-connect-tv-1.vercel.app",  // optional variants if used
   "http://localhost:3000",
   "http://127.0.0.1:3000"
 ];
